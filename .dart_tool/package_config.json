@@ -104,6 +104,24 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "cloud_firestore",
+      "rootUri": "file:///C:/Users/pomga/AppData/Local/Pub/Cache/hosted/pub.dev/cloud_firestore-5.6.12",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
+    },
+    {
+      "name": "cloud_firestore_platform_interface",
+      "rootUri": "file:///C:/Users/pomga/AppData/Local/Pub/Cache/hosted/pub.dev/cloud_firestore_platform_interface-6.6.12",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
+    },
+    {
+      "name": "cloud_firestore_web",
+      "rootUri": "file:///C:/Users/pomga/AppData/Local/Pub/Cache/hosted/pub.dev/cloud_firestore_web-4.4.12",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
       "name": "code_builder",
       "rootUri": "file:///C:/Users/pomga/AppData/Local/Pub/Cache/hosted/pub.dev/code_builder-4.11.1",
       "packageUri": "lib/",

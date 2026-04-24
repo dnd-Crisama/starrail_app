@@ -1,26 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/logger.dart';
-import '../providers/home_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
-
-/// App Shell — bố cục chính giống Discord.
-///
-/// Bố cục 3 cột:
-/// ┌──────────┬───────────────┬────────────────────────┐
-/// │  Server  │   Channel     │    Main Content Area    │
-/// │  List    │   Sidebar     │    (Chat / Voice)       │
-/// │  (72px)  │   (240px)     │    (Expanded)           │
-/// └──────────┴───────────────┴────────────────────────┘
-///
-/// tất cả nội dung đều là placeholder.
-/// Server icons, channel list, messages — đều static.
+import '../../../auth/domain/entities/user_entity.dart';
+import '../providers/home_provider.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -29,36 +16,34 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < AppConstants.mobileBreakpoint;
-    final user = ref.watch(currentUserProvider);
 
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       body: SafeArea(
         child: isMobile
-            ? _buildMobileLayout(context, ref, user)
-            : _buildDesktopLayout(context, ref, user),
+            ? _buildMobileLayout(context, ref)
+            : _buildDesktopLayout(context, ref),
       ),
     );
   }
 
-  /// Layout desktop: 3 cột đầy đủ.
-  Widget _buildDesktopLayout(BuildContext context, WidgetRef ref, User? user) {
+  // ────────────────────────────────────────────────────────────
+  // DESKTOP LAYOUT (3 cột)
+  // ────────────────────────────────────────────────────────────
+  Widget _buildDesktopLayout(BuildContext context, WidgetRef ref) {
     return Row(
       children: [
-        // ── Cột 1: Server List ─────────────────────────────
         _buildServerList(ref),
-
-        // ── Cột 2: Channel Sidebar ────────────────────────
         _buildChannelSidebar(ref),
-
-        // ── Cột 3: Main Content ───────────────────────────
-        Expanded(child: _buildMainContent(ref, user)),
+        Expanded(child: _buildMainContent(ref)),
       ],
     );
   }
 
-  /// Layout mobile: chỉ hiện main content với drawer cho sidebar.
-  Widget _buildMobileLayout(BuildContext context, WidgetRef ref, User? user) {
+  // ────────────────────────────────────────────────────────────
+  // MOBILE LAYOUT (App Bar + Drawer)
+  // ────────────────────────────────────────────────────────────
+  Widget _buildMobileLayout(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       appBar: AppBar(
@@ -68,9 +53,7 @@ class HomeScreen extends ConsumerWidget {
           builder: (context) {
             return IconButton(
               icon: const Icon(Icons.menu, color: AppColors.white),
-              onPressed: () {
-                Scaffold.of(context).openDrawer();
-              },
+              onPressed: () => Scaffold.of(context).openDrawer(),
             );
           },
         ),
@@ -79,11 +62,12 @@ class HomeScreen extends ConsumerWidget {
           style: AppTextStyles.serverName,
         ),
       ),
+      // DRAWER CHO MOBILE: Chứa Channel List VÀ User Panel (có Logout)
       drawer: Drawer(
         backgroundColor: AppColors.bgSecondary,
         child: Column(
           children: [
-            // Server name header
+            // Header
             Container(
               height: 48,
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -106,7 +90,8 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
             const Divider(color: AppColors.divider, height: 1),
-            // Channel list placeholder
+
+            // Channel list
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -115,27 +100,76 @@ class HomeScreen extends ConsumerWidget {
                   _buildChannelItem(
                     name: 'general',
                     isSelected: true,
-                    onTap: () {
-                      Navigator.pop(context);
-                    },
+                    onTap: () => Navigator.pop(context),
                   ),
                   _buildChannelItem(
                     name: 'random',
-                    onTap: () {
-                      Navigator.pop(context);
-                    },
+                    onTap: () => Navigator.pop(context),
                   ),
                 ],
               ),
             ),
+
+            // USER PANEL CHO MOBILE (Nằm cố định ở cuối Drawer)
+            _buildMobileUserPanel(ref),
           ],
         ),
       ),
-      body: _buildMainContent(ref, user),
+      body: _buildMainContent(ref),
     );
   }
 
-  /// Server list — cột trái cùng, chứa icon các server.
+  // ────────────────────────────────────────────────────────────
+  // USER PANEL CHO MOBILE (Rộng rãi, dễ bấm)
+  // ────────────────────────────────────────────────────────────
+  Widget _buildMobileUserPanel(WidgetRef ref) {
+    final authState = ref.watch(authNotifierProvider);
+    final user = authState.user;
+    final displayName = user?.username ?? 'Unknown';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: const BoxDecoration(
+        color: Color(0xFF232428),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(4),
+          topRight: Radius.circular(4),
+        ),
+      ),
+      child: Row(
+        children: [
+          _buildUserAvatar(displayName: displayName, size: 32),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              displayName,
+              style: AppTextStyles.bodySecondary.copyWith(
+                fontWeight: FontWeight.w600,
+                color: AppColors.headerPrimary,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          // Nút Logout rõ ràng trên Mobile
+          TextButton.icon(
+            onPressed: () => ref.read(authNotifierProvider.notifier).logout(),
+            icon: const Icon(Icons.logout, color: AppColors.red, size: 18),
+            label: const Text(
+              'Thoát',
+              style: TextStyle(color: AppColors.red, fontSize: 14),
+            ),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // SERVER LIST (Cột trái - desktop)
+  // ────────────────────────────────────────────────────────────
   Widget _buildServerList(WidgetRef ref) {
     return Container(
       width: AppConstants.serverListWidth,
@@ -143,8 +177,6 @@ class HomeScreen extends ConsumerWidget {
       child: Column(
         children: [
           const SizedBox(height: 12),
-
-          // ── Home / DM button ────────────────────────────
           _buildServerIconButton(
             isSelected: true,
             tooltip: 'Direct Messages',
@@ -153,14 +185,9 @@ class HomeScreen extends ConsumerWidget {
               color: AppColors.white,
               size: 28,
             ),
-            onTap: () {
-              Logger.debug('Home/DM tapped', tag: 'HomeScreen');
-            },
+            onTap: () {},
           ),
-
           const SizedBox(height: 8),
-
-          // ── Separator ────────────────────────────────────
           Container(
             width: 32,
             height: 2,
@@ -169,10 +196,7 @@ class HomeScreen extends ConsumerWidget {
               borderRadius: BorderRadius.circular(1),
             ),
           ),
-
           const SizedBox(height: 8),
-
-          // ── Server icons (placeholder) ───────────────────
           _buildServerIconButton(
             tooltip: 'My Server',
             child: Text(
@@ -184,73 +208,21 @@ class HomeScreen extends ConsumerWidget {
             ),
             isSelected: true,
             hasIndicator: true,
-            onTap: () {
-              ref.read(selectedServerNameProvider.notifier).state = 'My Server';
-            },
+            onTap: () => ref.read(selectedServerNameProvider.notifier).state =
+                'My Server',
           ),
-
-          _buildServerIconButton(
-            tooltip: 'Gaming Hub',
-            child: Text(
-              'G',
-              style: AppTextStyles.headerSecondary.copyWith(
-                fontSize: 18,
-                color: AppColors.white,
-              ),
-            ),
-            onTap: () {
-              ref.read(selectedServerNameProvider.notifier).state =
-                  'Gaming Hub';
-            },
-          ),
-
-          _buildServerIconButton(
-            tooltip: 'Study Group',
-            child: Text(
-              'S',
-              style: AppTextStyles.headerSecondary.copyWith(
-                fontSize: 18,
-                color: AppColors.white,
-              ),
-            ),
-            onTap: () {
-              ref.read(selectedServerNameProvider.notifier).state =
-                  'Study Group';
-            },
-          ),
-
           const Spacer(),
-
-          // ── Add server button ────────────────────────────
           _buildServerIconButton(
             tooltip: 'Thêm server',
             child: const Icon(Icons.add, color: AppColors.green, size: 20),
-            onTap: () {
-              Logger.debug('Add server tapped', tag: 'HomeScreen');
-              // Sẽ triển khai ở Part 4
-            },
+            onTap: () {},
           ),
-
-          // ── Explore button ───────────────────────────────
-          _buildServerIconButton(
-            tooltip: 'Khám phá',
-            child: const Icon(
-              Icons.compass_calibration_outlined,
-              color: AppColors.green,
-              size: 20,
-            ),
-            onTap: () {
-              Logger.debug('Explore tapped', tag: 'HomeScreen');
-            },
-          ),
-
           const SizedBox(height: 12),
         ],
       ),
     );
   }
 
-  /// Widget tạo một server icon button tròn.
   Widget _buildServerIconButton({
     required Widget child,
     required VoidCallback onTap,
@@ -262,21 +234,19 @@ class HomeScreen extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Column(
         children: [
-          Tooltip(
-            message: tooltip ?? '',
-            preferBelow: false,
-            child: GestureDetector(
-              onTap: onTap,
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: isSelected ? AppColors.brand : AppColors.bgPrimary,
-                  borderRadius: BorderRadius.circular(isSelected ? 16 : 24),
-                ),
-                alignment: Alignment.center,
-                child: child,
+          // Dùng InkWell thay GestureDetector để có hiệu ứng splash chuẩn
+          InkWell(
+            onTap: onTap,
+            customBorder: const CircleBorder(),
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: isSelected ? AppColors.brand : AppColors.bgPrimary,
+                borderRadius: BorderRadius.circular(isSelected ? 16 : 24),
               ),
+              alignment: Alignment.center,
+              child: child,
             ),
           ),
           if (hasIndicator) ...[
@@ -295,16 +265,16 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  /// Channel sidebar — cột thứ hai, chứa danh sách channel.
+  // ────────────────────────────────────────────────────────────
+  // CHANNEL SIDEBAR (Cột giữa - desktop)
+  // ────────────────────────────────────────────────────────────
   Widget _buildChannelSidebar(WidgetRef ref) {
     final serverName = ref.watch(selectedServerNameProvider);
-
     return Container(
       width: AppConstants.channelSidebarWidth,
       color: AppColors.bgSecondary,
       child: Column(
         children: [
-          // ── Server name header ───────────────────────────
           Container(
             height: AppConstants.channelHeaderHeight + 8,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -326,76 +296,186 @@ class HomeScreen extends ConsumerWidget {
               ],
             ),
           ),
-
           const Divider(color: AppColors.divider, height: 1),
-
-          // ── Channel list ─────────────────────────────────
           Expanded(
             child: ListView(
               padding: const EdgeInsets.only(top: 8, bottom: 16),
               children: [
-                // Text channels
                 _buildCategoryHeader('TEXT CHANNELS'),
                 _buildChannelItem(
                   name: 'general',
                   isSelected: true,
-                  onTap: () {
-                    ref.read(selectedChannelIdProvider.notifier).state =
-                        'general';
-                  },
+                  onTap: () =>
+                      ref.read(selectedChannelIdProvider.notifier).state =
+                          'general',
                 ),
                 _buildChannelItem(
                   name: 'random',
-                  onTap: () {
-                    ref.read(selectedChannelIdProvider.notifier).state =
-                        'random';
-                  },
+                  onTap: () =>
+                      ref.read(selectedChannelIdProvider.notifier).state =
+                          'random',
                 ),
-                _buildChannelItem(
-                  name: 'music',
-                  onTap: () {
-                    ref.read(selectedChannelIdProvider.notifier).state =
-                        'music';
-                  },
-                ),
-                _buildChannelItem(
-                  name: 'memes',
-                  onTap: () {
-                    ref.read(selectedChannelIdProvider.notifier).state =
-                        'memes';
-                  },
-                ),
-
                 const SizedBox(height: 16),
-
-                // Voice channels
                 _buildCategoryHeader('VOICE CHANNELS'),
                 _buildChannelItem(
                   name: 'General Voice',
                   isVoice: true,
-                  onTap: () {
-                    Logger.debug('Voice channel tapped', tag: 'HomeScreen');
-                  },
-                ),
-                _buildChannelItem(
-                  name: 'Gaming',
-                  isVoice: true,
-                  onTap: () {
-                    Logger.debug('Voice channel tapped', tag: 'HomeScreen');
-                  },
+                  onTap: () {},
                 ),
               ],
             ),
           ),
 
-          // ── User panel (bottom) ──────────────────────────
-          _buildUserPanel(ref),
+          // USER PANEL CHO DESKTOP
+          _buildDesktopUserPanel(ref),
         ],
       ),
     );
   }
 
-  /// Widget tạo category header (vd: "TEXT CHANNELS").
+  // ────────────────────────────────────────────────────────────
+  // USER PANEL CHO DESKTOP (Dùng PopupMenuButton thay Tooltip)
+  // ────────────────────────────────────────────────────────────
+  Widget _buildDesktopUserPanel(WidgetRef ref) {
+    final authState = ref.watch(authNotifierProvider);
+    final user = authState.user;
+    final displayName = user?.username ?? 'Unknown';
+    final statusText = user?.status == UserStatus.online
+        ? 'Trực tuyến'
+        : 'Ngoại tuyến';
+
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: const BoxDecoration(
+        color: Color(0xFF232428),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(4),
+          topRight: Radius.circular(4),
+        ),
+      ),
+      child: Row(
+        children: [
+          _buildUserAvatar(displayName: displayName, size: 32),
+          const SizedBox(width: 8),
+          // Cho phép truncate text nếu sidebar bị co lại cực nhỏ
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  displayName,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.headerPrimary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  statusText,
+                  style: AppTextStyles.textMutedSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+
+          // Dùng SizedBox cố định để vùng bấm không bị mất khi resize
+          SizedBox(
+            width: 28,
+            height: 28,
+            child: IconButton(
+              icon: const Icon(
+                Icons.mic_outlined,
+                color: AppColors.interactiveNormal,
+                size: 18,
+              ),
+              onPressed: () {},
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ),
+          SizedBox(
+            width: 28,
+            height: 28,
+            child: IconButton(
+              icon: const Icon(
+                Icons.headset_outlined,
+                color: AppColors.interactiveNormal,
+                size: 18,
+              ),
+              onPressed: () {},
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ),
+
+          // THAY THẾ TOOLTIP BẰNG POPUP MENU CHO DESKTOP
+          // Vừa đẹp, vừa không bị mất khi resize, vừa rõ ràng chức năng
+          PopupMenuButton<String>(
+            icon: const Icon(
+              Icons.settings_rounded,
+              color: AppColors.interactiveNormal,
+              size: 20,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+            ),
+            color: AppColors.bgFloating,
+            elevation: 2,
+            position: PopupMenuPosition.over,
+            onSelected: (value) {
+              if (value == 'logout') {
+                ref.read(authNotifierProvider.notifier).logout();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.settings,
+                      color: AppColors.interactiveNormal,
+                      size: 20,
+                    ),
+                    SizedBox(width: 10),
+                    Text('Cài đặt', style: AppTextStyles.bodySecondary),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, color: AppColors.red, size: 20),
+                    SizedBox(width: 10),
+                    Text(
+                      'Đăng xuất',
+                      style: TextStyle(
+                        color: AppColors.red,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // SHARED UI COMPONENTS
+  // ────────────────────────────────────────────────────────────
+
   Widget _buildCategoryHeader(String name) {
     return Padding(
       padding: const EdgeInsets.only(left: 16, right: 8, top: 16, bottom: 4),
@@ -408,7 +488,6 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  /// Widget tạo channel item trong sidebar.
   Widget _buildChannelItem({
     required String name,
     bool isSelected = false,
@@ -454,94 +533,6 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  /// User panel ở bottom của channel sidebar.
-  Widget _buildUserPanel(WidgetRef ref) {
-    final user = ref.watch(currentUserProvider);
-    final displayName = user?.displayName ?? user?.email ?? 'Unknown';
-    final email = user?.email ?? '';
-
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: const BoxDecoration(
-        color: Color(0xFF232428),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(4),
-          topRight: Radius.circular(4),
-        ),
-      ),
-      child: Row(
-        children: [
-          // Avatar
-          _buildUserAvatar(displayName: displayName, size: 32),
-          const SizedBox(width: 8),
-
-          // Username & status
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  displayName,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.headerPrimary,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const Text(
-                  'Trực tuyến',
-                  style: AppTextStyles.textMutedSmall,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-
-          // Action icons
-          IconButton(
-            icon: const Icon(
-              Icons.mic_outlined,
-              color: AppColors.interactiveNormal,
-              size: 20,
-            ),
-            onPressed: () {
-              Logger.debug('Mic toggle', tag: 'HomeScreen');
-            },
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          IconButton(
-            icon: const Icon(
-              Icons.headset_outlined,
-              color: AppColors.interactiveNormal,
-              size: 20,
-            ),
-            onPressed: () {
-              Logger.debug('Headset toggle', tag: 'HomeScreen');
-            },
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          IconButton(
-            icon: const Icon(
-              Icons.settings_rounded,
-              color: AppColors.interactiveNormal,
-              size: 20,
-            ),
-            onPressed: () {
-              Logger.debug('Settings tapped', tag: 'HomeScreen');
-            },
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Widget tạo avatar tròn với chữ cái đầu.
   Widget _buildUserAvatar({
     required String displayName,
     double size = 32,
@@ -567,13 +558,10 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  /// Main content area — header bar + content.
-  Widget _buildMainContent(WidgetRef ref, User? user) {
+  Widget _buildMainContent(WidgetRef ref) {
     final selectedChannel = ref.watch(selectedChannelIdProvider) ?? 'general';
-
     return Column(
       children: [
-        // ── Channel header bar ────────────────────────────
         Container(
           height: AppConstants.channelHeaderHeight,
           color: AppColors.bgSecondary,
@@ -584,209 +572,72 @@ class HomeScreen extends ConsumerWidget {
               const SizedBox(width: 8),
               Text(selectedChannel, style: AppTextStyles.headerSecondary),
               const Spacer(),
-              // Header actions (placeholder)
-              IconButton(
-                icon: const Icon(
-                  Icons.notifications_none_outlined,
-                  color: AppColors.interactiveNormal,
-                  size: 22,
-                ),
-                onPressed: () {
-                  Logger.debug('Notifications tapped', tag: 'HomeScreen');
-                },
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.push_pin_outlined,
-                  color: AppColors.interactiveNormal,
-                  size: 22,
-                ),
-                onPressed: () {
-                  Logger.debug('Pinned messages tapped', tag: 'HomeScreen');
-                },
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.people_alt_outlined,
-                  color: AppColors.interactiveNormal,
-                  size: 22,
-                ),
-                onPressed: () {
-                  Logger.debug('Member list toggled', tag: 'HomeScreen');
-                },
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              ),
-              const SizedBox(width: 4),
-              // Search box placeholder
-              Container(
-                width: 160,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: AppColors.bgTertiary,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                alignment: Alignment.centerLeft,
-                child: const Row(
-                  children: [
-                    Icon(Icons.search, color: AppColors.textMuted, size: 14),
-                    SizedBox(width: 4),
-                    Text('Tìm kiếm', style: AppTextStyles.textMutedSmall),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(
-                  Icons.inbox_outlined,
-                  color: AppColors.interactiveNormal,
-                  size: 22,
-                ),
-                onPressed: () {
-                  Logger.debug('Inbox tapped', tag: 'HomeScreen');
-                },
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              ),
-            ],
-          ),
-        ),
-
-        const Divider(color: AppColors.divider, height: 1),
-
-        // ── Content area ──────────────────────────────────
-        Expanded(
-          child: Row(
-            children: [
-              // Messages area
-              Expanded(child: _buildEmptyChannelState(selectedChannel)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Empty state khi channel chưa có tin nhắn.
-  Widget _buildEmptyChannelState(String channelName) {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 80),
-            Container(
-              width: 68,
-              height: 68,
-              decoration: BoxDecoration(
-                color: AppColors.bgModifierHover,
-                borderRadius: BorderRadius.circular(34),
-              ),
-              child: const Icon(
-                Icons.tag,
-                color: AppColors.channelDefault,
-                size: 36,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Chào mừng đến với #$channelName!',
-              style: AppTextStyles.welcomeTitle,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Đây là nơi bắt đầu của kênh #$channelName.',
-              style: AppTextStyles.welcomeSubtitle,
-            ),
-            const SizedBox(height: 48),
-
-            // ── Placeholder messages ─────────────────────
-            _buildPlaceholderMessage(
-              avatarText: 'D',
-              avatarColor: AppColors.green,
-              username: 'StarRail Bot',
-              time: 'Hôm nay lúc 00:00',
-              content: 'Đây là kênh #$channelName. Bắt đầu trò chuyện nào!',
-            ),
-            const SizedBox(height: 16),
-            _buildPlaceholderMessage(
-              avatarText: 'D',
-              avatarColor: AppColors.green,
-              username: 'StarRail Bot',
-              time: 'Hôm nay lúc 00:00',
-              content:
-                  'Mẹo: Bạn có thể @mention người khác, gửi emoji, upload file và nhiều hơn nữa trong các bản cập nhật tiếp theo.',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Placeholder message bubble.
-  Widget _buildPlaceholderMessage({
-    required String avatarText,
-    required Color avatarColor,
-    required String username,
-    required String time,
-    required String content,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 48),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Avatar
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: avatarColor,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              avatarText,
-              style: const TextStyle(
-                color: AppColors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-
-          // Message content
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      username,
-                      style: AppTextStyles.bodySecondary.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.headerPrimary,
-                      ),
+              // Search box ẩn trên mobile nếu quá nhỏ
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 400)
+                    return const SizedBox.shrink();
+                  return Container(
+                    width: 160,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: AppColors.bgTertiary,
+                      borderRadius: BorderRadius.circular(4),
                     ),
-                    const SizedBox(width: 8),
-                    Text(time, style: AppTextStyles.textMutedSmall),
-                  ],
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    alignment: Alignment.centerLeft,
+                    child: const Row(
+                      children: [
+                        Icon(
+                          Icons.search,
+                          color: AppColors.textMuted,
+                          size: 14,
+                        ),
+                        SizedBox(width: 4),
+                        Text('Tìm kiếm', style: AppTextStyles.textMutedSmall),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        const Divider(color: AppColors.divider, height: 1),
+        Expanded(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 80),
+                Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    color: AppColors.bgModifierHover,
+                    borderRadius: BorderRadius.circular(34),
+                  ),
+                  child: const Icon(
+                    Icons.tag,
+                    color: AppColors.channelDefault,
+                    size: 36,
+                  ),
                 ),
-                const SizedBox(height: 4),
-                Text(content, style: AppTextStyles.bodySecondary),
+                const SizedBox(height: 16),
+                Text(
+                  'Chào mừng đến với #$selectedChannel!',
+                  style: AppTextStyles.welcomeTitle,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Đây là nơi bắt đầu của kênh.',
+                  style: AppTextStyles.welcomeSubtitle,
+                ),
               ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -1,39 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart' hide AuthException;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/logger.dart';
+import '../providers/auth_provider.dart';
 
-/// Màn hình đăng ký.
-///
-/// Tương tự LoginScreen, gọi trực tiếp FirebaseAuth trong Part 1.
-/// Từ Part 2, sẽ refactor theo Clean Architecture.
-///
-/// Luồng hiện tại (Part 1):
-/// User nhập email + password + confirm password → bấm Đăng ký
-///   → Validate input (email format, password length, password match)
-///   → FirebaseAuth.createUserWithEmailAndPassword()
-///   → Thành công: auth state thay đổi → GoRouter redirect → /home
-///   → Thất bại: hiển thị error message trong UI
-///
-/// Lưu ý: Part 1 chỉ tạo Firebase Auth user.
-/// User profile document trong Firestore sẽ được tạo ở Part 2.
-class RegisterScreen extends StatefulWidget {
+class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
+  final _usernameController = TextEditingController(); // Thêm trường username
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _emailFocusNode = FocusNode();
+  final _usernameFocusNode = FocusNode();
   final _passwordFocusNode = FocusNode();
   final _confirmPasswordFocusNode = FocusNode();
 
@@ -45,76 +34,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void dispose() {
     _emailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _emailFocusNode.dispose();
+    _usernameFocusNode.dispose();
     _passwordFocusNode.dispose();
     _confirmPasswordFocusNode.dispose();
     super.dispose();
   }
 
-  /// Xử lý đăng ký.
   Future<void> _handleRegister() async {
-    setState(() {
-      _errorMessage = null;
-    });
-
+    setState(() => _errorMessage = null);
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    await ref
+        .read(authNotifierProvider.notifier)
+        .register(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          username: _usernameController.text.trim(),
+        );
 
-    try {
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      // Auth state tự thay đổi → GoRouter tự redirect.
-      Logger.info('Registration successful', tag: 'RegisterScreen');
-    } on FirebaseAuthException catch (e) {
-      Logger.error(
-        'Registration failed: ${e.code} - ${e.message}',
-        tag: 'RegisterScreen',
-      );
-      setState(() {
-        _errorMessage = _mapFirebaseAuthError(e.code);
-      });
-    } catch (e) {
-      Logger.error('Unexpected register error: $e', tag: 'RegisterScreen');
-      setState(() {
-        _errorMessage = 'Đã xảy ra lỗi không xác định. Vui lòng thử lại.';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+    if (mounted) {
+      final authState = ref.read(authNotifierProvider);
+      if (authState.errorMessage != null) {
+        setState(() => _errorMessage = authState.errorMessage);
       }
-    }
-  }
-
-  String _mapFirebaseAuthError(String code) {
-    switch (code) {
-      case 'email-already-in-use':
-        return 'Email này đã được đăng ký. Hãy dùng email khác hoặc đăng nhập.';
-      case 'invalid-email':
-        return 'Định dạng email không hợp lệ.';
-      case 'weak-password':
-        return 'Mật khẩu quá yếu. Cần ít nhất ${AppConstants.minPasswordLength} ký tự.';
-      case 'network-request-failed':
-        return 'Lỗi kết nối mạng. Vui lòng kiểm tra internet.';
-      case 'too-many-requests':
-        return 'Quá nhiều lần thử. Vui lòng thử lại sau.';
-      case 'operation-not-allowed':
-        return 'Phương thức đăng ký này không được bật. Liên hệ admin.';
-      default:
-        return 'Đăng ký thất bại ($code). Vui lòng thử lại.';
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(authNotifierProvider, (prev, next) {
+      if (mounted) {
+        setState(() {
+          _isLoading = next.isLoading;
+        });
+      }
+    });
+
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       body: Center(
@@ -135,7 +94,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ── Title ───────────────────────────────────
                   Text(
                     'Tạo một tài khoản',
                     textAlign: TextAlign.center,
@@ -149,12 +107,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // ── Error message ───────────────────────────
                   if (_errorMessage != null) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.red.withOpacity(0.1),
+                        color: AppColors.red.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: AppColors.red),
                       ),
@@ -166,7 +123,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const SizedBox(height: 16),
                   ],
 
-                  // ── Email field ─────────────────────────────
                   const Text('EMAIL', style: AppTextStyles.inputLabel),
                   const SizedBox(height: 8),
                   TextFormField(
@@ -174,7 +130,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     focusNode: _emailFocusNode,
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
-                    autofillHints: const [AutofillHints.email],
                     style: AppTextStyles.inputText,
                     decoration: const InputDecoration(
                       hintText: 'email@example.com',
@@ -188,21 +143,52 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       if (value == null || value.trim().isEmpty) {
                         return 'Vui lòng nhập email.';
                       }
-                      final emailRegex = RegExp(
+                      if (!RegExp(
                         r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
-                      );
-                      if (!emailRegex.hasMatch(value.trim())) {
+                      ).hasMatch(value.trim())) {
                         return 'Định dạng email không hợp lệ.';
                       }
                       return null;
                     },
-                    onFieldSubmitted: (_) {
-                      _passwordFocusNode.requestFocus();
-                    },
+                    onFieldSubmitted: (_) => _usernameFocusNode.requestFocus(),
                   ),
                   const SizedBox(height: 16),
 
-                  // ── Password field ──────────────────────────
+                  const Text('TÊN NGƯỜI DÙNG', style: AppTextStyles.inputLabel),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _usernameController,
+                    focusNode: _usernameFocusNode,
+                    textInputAction: TextInputAction.next,
+                    style: AppTextStyles.inputText,
+                    decoration: const InputDecoration(
+                      hintText: 'NguyenVanA',
+                      prefixIcon: Icon(
+                        Icons.person_outline,
+                        color: AppColors.textMuted,
+                        size: 20,
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Vui lòng nhập tên người dùng.';
+                      }
+                      if (value.trim().length < 2) {
+                        return 'Tên phải dài ít nhất 2 ký tự.';
+                      }
+                      if (value.trim().length >
+                          AppConstants.maxUsernameLength) {
+                        return 'Tên quá dài.';
+                      }
+                      if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(value.trim())) {
+                        return 'Chỉ chứa chữ cái, số và dấu gạch dưới (_).';
+                      }
+                      return null;
+                    },
+                    onFieldSubmitted: (_) => _passwordFocusNode.requestFocus(),
+                  ),
+                  const SizedBox(height: 16),
+
                   const Text('MẬT KHẨU', style: AppTextStyles.inputLabel),
                   const SizedBox(height: 8),
                   TextFormField(
@@ -210,7 +196,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     focusNode: _passwordFocusNode,
                     obscureText: _obscurePassword,
                     textInputAction: TextInputAction.next,
-                    autofillHints: const [AutofillHints.newPassword],
                     style: AppTextStyles.inputText,
                     decoration: InputDecoration(
                       hintText: 'Mật khẩu',
@@ -220,11 +205,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         size: 20,
                       ),
                       suffixIcon: GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
+                        onTap: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
                         child: Icon(
                           _obscurePassword
                               ? Icons.visibility_off_outlined
@@ -241,18 +224,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       if (value.length < AppConstants.minPasswordLength) {
                         return 'Mật khẩu cần ít nhất ${AppConstants.minPasswordLength} ký tự.';
                       }
-                      if (value.length > AppConstants.maxPasswordLength) {
-                        return 'Mật khẩu không quá ${AppConstants.maxPasswordLength} ký tự.';
-                      }
                       return null;
                     },
-                    onFieldSubmitted: (_) {
-                      _confirmPasswordFocusNode.requestFocus();
-                    },
+                    onFieldSubmitted: (_) =>
+                        _confirmPasswordFocusNode.requestFocus(),
                   ),
                   const SizedBox(height: 16),
 
-                  // ── Confirm Password field ──────────────────
                   const Text(
                     'XÁC NHẬN MẬT KHẨU',
                     style: AppTextStyles.inputLabel,
@@ -263,7 +241,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     focusNode: _confirmPasswordFocusNode,
                     obscureText: _obscureConfirmPassword,
                     textInputAction: TextInputAction.done,
-                    autofillHints: const [AutofillHints.newPassword],
                     style: AppTextStyles.inputText,
                     decoration: InputDecoration(
                       hintText: 'Nhập lại mật khẩu',
@@ -273,11 +250,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         size: 20,
                       ),
                       suffixIcon: GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _obscureConfirmPassword = !_obscureConfirmPassword;
-                          });
-                        },
+                        onTap: () => setState(
+                          () => _obscureConfirmPassword =
+                              !_obscureConfirmPassword,
+                        ),
                         child: Icon(
                           _obscureConfirmPassword
                               ? Icons.visibility_off_outlined
@@ -302,15 +278,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // ── Register button ─────────────────────────
                   SizedBox(
                     height: 44,
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _handleRegister,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.brand,
-                        disabledBackgroundColor: AppColors.brand.withOpacity(
-                          0.6,
+                        disabledBackgroundColor: AppColors.brand.withValues(
+                          alpha: 0.6,
                         ),
                       ),
                       child: _isLoading
@@ -329,7 +304,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // ── Login link ──────────────────────────────
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -338,9 +312,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         style: AppTextStyles.textMuted,
                       ),
                       TextButton(
-                        onPressed: () {
-                          context.go(AppConstants.loginPath);
-                        },
+                        onPressed: () => context.go(AppConstants.loginPath),
                         child: const Text('Đăng nhập'),
                       ),
                     ],

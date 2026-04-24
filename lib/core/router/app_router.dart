@@ -2,26 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:starrail_app/core/constants/app_constants.dart';
-import 'package:starrail_app/core/router/auth_refresh_notifier.dart';
-import 'package:starrail_app/core/theme/app_colors.dart';
-import 'package:starrail_app/core/theme/app_text_styles.dart';
-import 'package:starrail_app/core/utils/logger.dart';
+import '../constants/app_constants.dart';
+import '../router/auth_refresh_notifier.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
+import '../utils/logger.dart';
+import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/auth/presentation/screens/splash_screen.dart';
+import '../../features/auth/presentation/screens/login_screen.dart';
+import '../../features/auth/presentation/screens/register_screen.dart';
+import '../../features/auth/presentation/screens/create_profile_screen.dart';
+import '../../features/home/presentation/screens/home_screen.dart';
 
-import 'package:starrail_app/features/auth/presentation/providers/auth_provider.dart';
-import 'package:starrail_app/features/auth/presentation/screens/splash_screen.dart';
-import 'package:starrail_app/features/auth/presentation/screens/login_screen.dart';
-import 'package:starrail_app/features/auth/presentation/screens/register_screen.dart';
-import 'package:starrail_app/features/home/presentation/screens/home_screen.dart';
-
-/// Notifier instance dùng làm bridge cho GoRouter.
 final _authRefreshNotifier = AuthRefreshNotifier();
 
-/// Provider tạo và quản lý GoRouter instance.
 final routerProvider = Provider<GoRouter>((ref) {
-  ref.listen(authStateProvider, (previous, next) {
+  ref.listen(authNotifierProvider, (previous, next) {
     Logger.info(
-      'Auth state changed: ${previous?.value?.uid} -> ${next.value?.uid}',
+      'AuthNotifier changed -> HasUser: ${next.user != null}, NeedsProfile: ${next.needsProfileCreation}',
       tag: 'Router',
     );
     _authRefreshNotifier.notify();
@@ -32,39 +30,46 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: AppConstants.splashPath,
     debugLogDiagnostics: true,
     redirect: (context, state) {
-      final authAsync = ref.read(authStateProvider);
+      final authState = ref.read(authNotifierProvider);
+      final currentPath = state.matchedLocation;
 
-      if (authAsync.isLoading) {
-        Logger.debug(
-          'Auth loading, staying on ${state.matchedLocation}',
-          tag: 'Router',
-        );
-        return null;
+      // 1. Đang load dữ liệu ban đầu
+      if (authState.isLoading) {
+        return null; // Ở lại splash
       }
 
-      final isLoggedIn = authAsync.hasValue && authAsync.value != null;
-      final currentPath = state.matchedLocation;
+      // Dùng computed property 'isAuthenticated' để biết đã pass Auth chưa
+      final isAuthenticated = authState.isAuthenticated;
+      final needsProfile = authState.needsProfileCreation;
+
       final isAuthRoute =
           currentPath == AppConstants.loginPath ||
           currentPath == AppConstants.registerPath;
-      final isSplashRoute = currentPath == AppConstants.splashPath;
+      final isProfileRoute = currentPath == AppConstants.createProfilePath;
 
-      Logger.debug(
-        'Redirect check: path=$currentPath, isLoggedIn=$isLoggedIn, isAuthRoute=$isAuthRoute',
-        tag: 'Router',
-      );
+      // 2. Đã xác thực + Cần tạo profile + Chưa ở trang tạo profile
+      if (isAuthenticated && needsProfile && !isProfileRoute) {
+        Logger.info('Redirecting to create profile', tag: 'Router');
+        return AppConstants.createProfilePath;
+      }
 
-      if (isLoggedIn && (isSplashRoute || isAuthRoute)) {
+      // 3. Đã xác thực + Không cần tạo profile + Đang ở trang auth/profile
+      if (isAuthenticated && !needsProfile && (isAuthRoute || isProfileRoute)) {
         Logger.info('Redirecting to home', tag: 'Router');
         return AppConstants.homePath;
       }
 
-      if (!isLoggedIn && !isAuthRoute && !isSplashRoute) {
+      // 4. Chưa xác thực + Đang ở trang được bảo vệ
+      if (!isAuthenticated &&
+          !isAuthRoute &&
+          !isProfileRoute &&
+          currentPath != AppConstants.splashPath) {
         Logger.info('Redirecting to login', tag: 'Router');
         return AppConstants.loginPath;
       }
 
-      if (!isLoggedIn && isSplashRoute) {
+      // 5. Chưa xác thực + Đang ở splash
+      if (!isAuthenticated && currentPath == AppConstants.splashPath) {
         Logger.info('Redirecting to login from splash', tag: 'Router');
         return AppConstants.loginPath;
       }
@@ -74,27 +79,23 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: AppConstants.splashPath,
-        builder: (context, state) {
-          return const SplashScreen();
-        },
+        builder: (_, __) => const SplashScreen(),
       ),
       GoRoute(
         path: AppConstants.loginPath,
-        builder: (context, state) {
-          return const LoginScreen();
-        },
+        builder: (_, __) => const LoginScreen(),
       ),
       GoRoute(
         path: AppConstants.registerPath,
-        builder: (context, state) {
-          return const RegisterScreen();
-        },
+        builder: (_, __) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: AppConstants.createProfilePath,
+        builder: (_, __) => const CreateProfileScreen(),
       ),
       GoRoute(
         path: AppConstants.homePath,
-        builder: (context, state) {
-          return const HomeScreen();
-        },
+        builder: (_, __) => const HomeScreen(),
       ),
     ],
     errorBuilder: (context, state) {
@@ -107,9 +108,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             children: [
               const Icon(Icons.error_outline, color: AppColors.red, size: 48),
               const SizedBox(height: 16),
-              Text('Page not found', style: AppTextStyles.headerPrimary),
+              const Text('Page not found', style: AppTextStyles.headerPrimary),
               const SizedBox(height: 8),
-              Text(state.matchedLocation, style: AppTextStyles.textMuted),
+              const Text(
+                'The page you are looking for does not exist.',
+                style: AppTextStyles.textMuted,
+              ),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () => context.go(AppConstants.homePath),

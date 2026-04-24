@@ -10,6 +10,7 @@ class AppConstants {
   static const String loginPath = '/login';
   static const String registerPath = '/register';
   static const String homePath = '/home';
+  static const String createProfilePath = '/create-profile';
 
   // ── UI dimensions ────────────────────────────────────────────
   /// Chiều rộng server list (cột trái cùng)
