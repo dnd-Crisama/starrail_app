@@ -14,7 +14,7 @@ dependencies:
   # State management
   flutter_riverpod: ^2.5.1
 
-  # Routing
+  # Routin
   go_router: ^14.2.0
 
   # Firebase
