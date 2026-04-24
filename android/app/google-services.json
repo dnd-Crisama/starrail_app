@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "352924430721",
+    "project_id": "starrail-app",
+    "storage_bucket": "starrail-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:352924430721:android:55a1ace6b632472ccb7880",
+        "android_client_info": {
+          "package_name": "com.example.starrail_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDs7IyF9lqn1cn0OUnMQnzrderdwcXgBFQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
