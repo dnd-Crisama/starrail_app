@@ -6,7 +6,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/providers/profile_provider.dart';
 import '../../../auth/domain/entities/user_entity.dart';
+import '../../../auth/presentation/screens/profile_screen.dart';
 import '../providers/home_provider.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -27,22 +29,16 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  // ────────────────────────────────────────────────────────────
-  // DESKTOP LAYOUT (3 cột)
-  // ────────────────────────────────────────────────────────────
   Widget _buildDesktopLayout(BuildContext context, WidgetRef ref) {
     return Row(
       children: [
         _buildServerList(ref),
-        _buildChannelSidebar(ref),
+        _buildChannelSidebar(context, ref),
         Expanded(child: _buildMainContent(ref)),
       ],
     );
   }
 
-  // ────────────────────────────────────────────────────────────
-  // MOBILE LAYOUT (App Bar + Drawer)
-  // ────────────────────────────────────────────────────────────
   Widget _buildMobileLayout(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
@@ -62,12 +58,10 @@ class HomeScreen extends ConsumerWidget {
           style: AppTextStyles.serverName,
         ),
       ),
-      // DRAWER CHO MOBILE: Chứa Channel List VÀ User Panel (có Logout)
       drawer: Drawer(
         backgroundColor: AppColors.bgSecondary,
         child: Column(
           children: [
-            // Header
             Container(
               height: 48,
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -90,8 +84,6 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
             const Divider(color: AppColors.divider, height: 1),
-
-            // Channel list
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -109,9 +101,8 @@ class HomeScreen extends ConsumerWidget {
                 ],
               ),
             ),
-
-            // USER PANEL CHO MOBILE (Nằm cố định ở cuối Drawer)
-            _buildMobileUserPanel(ref),
+            // TRUYỀN CONTEXT VÀO ĐÂY
+            _buildMobileUserPanel(context, ref),
           ],
         ),
       ),
@@ -119,13 +110,12 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  // ────────────────────────────────────────────────────────────
-  // USER PANEL CHO MOBILE (Rộng rãi, dễ bấm)
-  // ────────────────────────────────────────────────────────────
-  Widget _buildMobileUserPanel(WidgetRef ref) {
+  // ── MOBILE USER PANEL ──────────────────────────────────────
+  Widget _buildMobileUserPanel(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authNotifierProvider);
     final user = authState.user;
     final displayName = user?.username ?? 'Unknown';
+    final avatarUrl = user?.avatarUrl ?? '';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -138,19 +128,35 @@ class HomeScreen extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          _buildUserAvatar(displayName: displayName, size: 32),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              displayName,
-              style: AppTextStyles.bodySecondary.copyWith(
-                fontWeight: FontWeight.w600,
-                color: AppColors.headerPrimary,
-              ),
-              overflow: TextOverflow.ellipsis,
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            ),
+            // SỬA Ở ĐÂY: Thêm backgroundImage: avatarUrl
+            child: _buildUserAvatar(
+              displayName: displayName,
+              size: 32,
+              backgroundImage: avatarUrl,
             ),
           ),
-          // Nút Logout rõ ràng trên Mobile
+          const SizedBox(width: 8),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              ),
+              child: Text(
+                displayName,
+                style: AppTextStyles.bodySecondary.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.headerPrimary,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
           TextButton.icon(
             onPressed: () => ref.read(authNotifierProvider.notifier).logout(),
             icon: const Icon(Icons.logout, color: AppColors.red, size: 18),
@@ -167,9 +173,7 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  // ────────────────────────────────────────────────────────────
-  // SERVER LIST (Cột trái - desktop)
-  // ────────────────────────────────────────────────────────────
+  // ── SERVER LIST ────────────────────────────────────────────
   Widget _buildServerList(WidgetRef ref) {
     return Container(
       width: AppConstants.serverListWidth,
@@ -234,7 +238,6 @@ class HomeScreen extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Column(
         children: [
-          // Dùng InkWell thay GestureDetector để có hiệu ứng splash chuẩn
           InkWell(
             onTap: onTap,
             customBorder: const CircleBorder(),
@@ -265,10 +268,8 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  // ────────────────────────────────────────────────────────────
-  // CHANNEL SIDEBAR (Cột giữa - desktop)
-  // ────────────────────────────────────────────────────────────
-  Widget _buildChannelSidebar(WidgetRef ref) {
+  // ── CHANNEL SIDEBAR ────────────────────────────────────────
+  Widget _buildChannelSidebar(BuildContext context, WidgetRef ref) {
     final serverName = ref.watch(selectedServerNameProvider);
     return Container(
       width: AppConstants.channelSidebarWidth,
@@ -325,24 +326,22 @@ class HomeScreen extends ConsumerWidget {
               ],
             ),
           ),
-
-          // USER PANEL CHO DESKTOP
-          _buildDesktopUserPanel(ref),
+          // TRUYỀN CONTEXT VÀO ĐÂY
+          _buildDesktopUserPanel(context, ref),
         ],
       ),
     );
   }
 
-  // ────────────────────────────────────────────────────────────
-  // USER PANEL CHO DESKTOP (Dùng PopupMenuButton thay Tooltip)
-  // ────────────────────────────────────────────────────────────
-  Widget _buildDesktopUserPanel(WidgetRef ref) {
-    final authState = ref.watch(authNotifierProvider);
-    final user = authState.user;
+  // ── DESKTOP USER PANEL ─────────────────────────────────────
+  Widget _buildDesktopUserPanel(BuildContext context, WidgetRef ref) {
+    final profileState = ref.watch(profileNotifierProvider);
+    final user = profileState.user ?? ref.watch(authNotifierProvider).user;
+
     final displayName = user?.username ?? 'Unknown';
-    final statusText = user?.status == UserStatus.online
-        ? 'Trực tuyến'
-        : 'Ngoại tuyến';
+    final statusText = _mapStatusToString(user?.status);
+    final statusColor = _getStatusColor(user?.status);
+    final avatarUrl = user?.avatarUrl ?? '';
 
     return Container(
       height: 52,
@@ -356,32 +355,68 @@ class HomeScreen extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          _buildUserAvatar(displayName: displayName, size: 32),
-          const SizedBox(width: 8),
-          // Cho phép truncate text nếu sidebar bị co lại cực nhỏ
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
               children: [
-                Text(
-                  displayName,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.headerPrimary,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+                _buildUserAvatar(
+                  displayName: displayName,
+                  size: 32,
+                  backgroundImage: avatarUrl,
                 ),
-                Text(
-                  statusText,
-                  style: AppTextStyles.textMutedSmall,
-                  overflow: TextOverflow.ellipsis,
+                Positioned(
+                  bottom: -2,
+                  right: -2,
+                  child: Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFF232428),
+                        width: 2,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-
-          // Dùng SizedBox cố định để vùng bấm không bị mất khi resize
+          const SizedBox(width: 8),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.headerPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    statusText,
+                    style: AppTextStyles.textMutedSmall.copyWith(
+                      color: statusColor,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
           SizedBox(
             width: 28,
             height: 28,
@@ -411,8 +446,6 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
 
-          // THAY THẾ TOOLTIP BẰNG POPUP MENU CHO DESKTOP
-          // Vừa đẹp, vừa không bị mất khi resize, vừa rõ ràng chức năng
           PopupMenuButton<String>(
             icon: const Icon(
               Icons.settings_rounded,
@@ -425,25 +458,29 @@ class HomeScreen extends ConsumerWidget {
               borderRadius: BorderRadius.circular(4),
             ),
             color: AppColors.bgFloating,
-            elevation: 2,
-            position: PopupMenuPosition.over,
             onSelected: (value) {
               if (value == 'logout') {
                 ref.read(authNotifierProvider.notifier).logout();
               }
+              if (value == 'profile') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                );
+              }
             },
             itemBuilder: (context) => [
               const PopupMenuItem(
-                value: 'settings',
+                value: 'profile',
                 child: Row(
                   children: [
                     Icon(
-                      Icons.settings,
+                      Icons.person,
                       color: AppColors.interactiveNormal,
                       size: 20,
                     ),
                     SizedBox(width: 10),
-                    Text('Cài đặt', style: AppTextStyles.bodySecondary),
+                    Text('Hồ sơ của tôi', style: AppTextStyles.bodySecondary),
                   ],
                 ),
               ),
@@ -472,10 +509,7 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  // ────────────────────────────────────────────────────────────
-  // SHARED UI COMPONENTS
-  // ────────────────────────────────────────────────────────────
-
+  // ── SHARED UI COMPONENTS ───────────────────────────────────
   Widget _buildCategoryHeader(String name) {
     return Padding(
       padding: const EdgeInsets.only(left: 16, right: 8, top: 16, bottom: 4),
@@ -537,24 +571,32 @@ class HomeScreen extends ConsumerWidget {
     required String displayName,
     double size = 32,
     Color? backgroundColor,
+    String? backgroundImage,
   }) {
-    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         color: backgroundColor ?? AppColors.brand,
         shape: BoxShape.circle,
+        image: backgroundImage != null && backgroundImage.isNotEmpty
+            ? DecorationImage(
+                image: NetworkImage(backgroundImage),
+                fit: BoxFit.cover,
+              )
+            : null,
       ),
       alignment: Alignment.center,
-      child: Text(
-        initial,
-        style: TextStyle(
-          color: AppColors.white,
-          fontSize: size * 0.45,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      child: backgroundImage == null || backgroundImage.isEmpty
+          ? Text(
+              displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+              style: TextStyle(
+                color: AppColors.white,
+                fontSize: size * 0.45,
+                fontWeight: FontWeight.w600,
+              ),
+            )
+          : null,
     );
   }
 
@@ -572,11 +614,11 @@ class HomeScreen extends ConsumerWidget {
               const SizedBox(width: 8),
               Text(selectedChannel, style: AppTextStyles.headerSecondary),
               const Spacer(),
-              // Search box ẩn trên mobile nếu quá nhỏ
               LayoutBuilder(
                 builder: (context, constraints) {
-                  if (constraints.maxWidth < 400)
+                  if (constraints.maxWidth < 400) {
                     return const SizedBox.shrink();
+                  }
                   return Container(
                     width: 160,
                     height: 28,
@@ -639,5 +681,31 @@ class HomeScreen extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  String _mapStatusToString(UserStatus? status) {
+    switch (status) {
+      case UserStatus.online:
+        return 'Trực tuyến';
+      case UserStatus.idle:
+        return 'Chờ đợi';
+      case UserStatus.dnd:
+        return 'Không làm phiền';
+      default:
+        return 'Ngoại tuyến';
+    }
+  }
+
+  Color _getStatusColor(UserStatus? status) {
+    switch (status) {
+      case UserStatus.online:
+        return AppColors.statusOnline;
+      case UserStatus.idle:
+        return AppColors.statusIdle;
+      case UserStatus.dnd:
+        return AppColors.statusDnd;
+      default:
+        return AppColors.statusOffline;
+    }
   }
 }

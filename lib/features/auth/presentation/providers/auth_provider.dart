@@ -186,6 +186,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (failure is ServerFailure) return failure.message;
     return 'Đã xảy ra lỗi không xác định.';
   }
+
+  void updateUserEntity(UserEntity newUser) {
+    state = state.copyWith(user: newUser);
+  }
 }
 
 final authNotifierProvider = StateNotifierProvider<AuthNotifier, AuthState>((

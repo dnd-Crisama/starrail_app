@@ -24,8 +24,6 @@ class UserModel {
     required this.lastSeenAt,
   });
 
-  /// Chuyển đổi từ Firestore Document sang Model.
-  /// Xử lý các trường Timestamp đặc biệt.
   factory UserModel.fromFirestore(Map<String, dynamic> map, String documentId) {
     return UserModel(
       uid: documentId,
@@ -40,7 +38,6 @@ class UserModel {
     );
   }
 
-  /// Chuyển đổi từ Model sang Map để lưu vào Firestore.
   Map<String, dynamic> toFirestore() {
     return {
       'username': username.toLowerCase().trim(),
@@ -48,13 +45,25 @@ class UserModel {
       'avatarUrl': avatarUrl,
       'bio': bio,
       'status': status,
-      'createdAt': FieldValue.serverTimestamp(), // Dùng server time khi tạo mới
+      'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       'lastSeenAt': FieldValue.serverTimestamp(),
     };
   }
 
-  /// Helper để parse Timestamp thành DateTime an toàn.
+  // HÀM MỚI: Tạo map chỉ chứa những field cần cập nhật (tránh ghi đè null)
+  Map<String, dynamic> toUpdateMap({
+    String? username,
+    String? bio,
+    String? avatarUrl,
+  }) {
+    final Map<String, dynamic> data = {};
+    if (username != null) data['username'] = username.toLowerCase().trim();
+    if (bio != null) data['bio'] = bio;
+    if (avatarUrl != null) data['avatarUrl'] = avatarUrl;
+    return data;
+  }
+
   static DateTime _parseTimestamp(dynamic value) {
     if (value == null) return DateTime.now();
     if (value is Timestamp) return value.toDate();
@@ -62,7 +71,6 @@ class UserModel {
     return DateTime.now();
   }
 
-  /// Map sang Entity (Data sạch cho Domain)
   UserEntity toEntity() {
     return UserEntity(
       uid: uid,
@@ -77,7 +85,6 @@ class UserModel {
     );
   }
 
-  /// Map từ Entity sang Model (thường dùng khi update data)
   factory UserModel.fromEntity(UserEntity entity) {
     return UserModel(
       uid: entity.uid,

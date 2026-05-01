@@ -14,6 +14,12 @@ dependencies:
   # State management
   flutter_riverpod: ^2.5.1
 
+  # Networking (Dùng để gọi Cloudinary API upload ảnh)
+  dio: ^5.4.0
+  
+  # Image Picker (Để chọn avatar từ gallery/camera)
+  image_picker: ^1.0.7
+
   # Routing
   go_router: ^14.2.0
 
@@ -26,6 +32,7 @@ dependencies:
   freezed_annotation: ^2.4.4
   uuid: ^4.4.0
   equatable: ^2.0.8
+  flutter_dotenv: ^5.1.0
 
 dev_dependencies:
   flutter_test:
@@ -36,3 +43,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - .env

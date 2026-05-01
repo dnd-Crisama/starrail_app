@@ -2,12 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/errors/exceptions.dart';
 import '../models/user_model.dart';
 
-/// Giao tiếp trực tiếp với Cloud Firestore collection 'users'.
 abstract class UserRemoteDatasource {
   Future<void> createUserDocument(UserModel user);
   Future<UserModel> getUserData(String uid);
   Future<bool> checkUsernameExists(String username);
   Future<void> updateStatus(String uid, String status);
+  Future<UserModel> updateProfileData(String uid, Map<String, dynamic> data);
 }
 
 class UserRemoteDatasourceImpl implements UserRemoteDatasource {
@@ -29,7 +29,7 @@ class UserRemoteDatasourceImpl implements UserRemoteDatasource {
     try {
       final doc = await firestore.collection('users').doc(uid).get();
       if (!doc.exists) {
-        throw const CacheException(message: 'User document not found');
+        throw CacheException(message: 'User document not found');
       }
       return UserModel.fromFirestore(doc.data()!, doc.id);
     } catch (e) {
@@ -64,6 +64,30 @@ class UserRemoteDatasourceImpl implements UserRemoteDatasource {
       });
     } catch (e) {
       throw ServerException(message: 'Failed to update status: $e');
+    }
+  }
+
+  @override
+  Future<UserModel> updateProfileData(
+    String uid,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      // Cập nhật các field truyền vào
+      await firestore.collection('users').doc(uid).update({
+        ...data,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Đọc lại document mới nhất để trả về cho UI
+      final updatedDoc = await firestore.collection('users').doc(uid).get();
+      if (!updatedDoc.exists)
+        throw const CacheException(message: 'User not found after update');
+
+      return UserModel.fromFirestore(updatedDoc.data()!, updatedDoc.id);
+    } catch (e) {
+      if (e is CacheException) rethrow;
+      throw ServerException(message: 'Failed to update profile: $e');
     }
   }
 }

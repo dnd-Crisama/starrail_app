@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -18,7 +19,10 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    Logger.info('Firebase initialized successfully', tag: 'Main');
+
+    await dotenv.load(fileName: ".env");
+
+    Logger.info('Firebase & Env initialized successfully', tag: 'Main');
   } catch (e, stackTrace) {
     Logger.error(
       'Failed to initialize Firebase: $e',
