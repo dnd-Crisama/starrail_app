@@ -10,6 +10,9 @@ import '../../../auth/presentation/providers/profile_provider.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/screens/profile_screen.dart';
 import '../providers/home_provider.dart';
+import '../../../server/presentation/screens/create_server_screen.dart';
+import '../../../server/presentation/screens/join_server_screen.dart';
+import '../../../server/presentation/providers/server_provider.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -32,7 +35,7 @@ class HomeScreen extends ConsumerWidget {
   Widget _buildDesktopLayout(BuildContext context, WidgetRef ref) {
     return Row(
       children: [
-        _buildServerList(ref),
+        _buildServerList(context, ref),
         _buildChannelSidebar(context, ref),
         Expanded(child: _buildMainContent(ref)),
       ],
@@ -174,22 +177,33 @@ class HomeScreen extends ConsumerWidget {
   }
 
   // ── SERVER LIST ────────────────────────────────────────────
-  Widget _buildServerList(WidgetRef ref) {
+  Widget _buildServerList(BuildContext context, WidgetRef ref) {
+    final serverListState = ref.watch(userServersStreamProvider);
+
+    // Đọc server đang được chọn để highlight
+    final currentSelectedServer = ref.watch(selectedServerNameProvider);
+
     return Container(
       width: AppConstants.serverListWidth,
       color: AppColors.bgTertiary,
       child: Column(
         children: [
           const SizedBox(height: 12),
+
+          // Nút Direct Messages (Giữ nguyên)
           _buildServerIconButton(
-            isSelected: true,
+            isSelected:
+                currentSelectedServer == 'Direct Messages', // Thêm logic chọn
             tooltip: 'Direct Messages',
             child: const Icon(
               Icons.chat_bubble_rounded,
               color: AppColors.white,
               size: 28,
             ),
-            onTap: () {},
+            onTap: () {
+              ref.read(selectedServerNameProvider.notifier).state =
+                  'Direct Messages';
+            },
           ),
           const SizedBox(height: 8),
           Container(
@@ -201,25 +215,61 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 8),
-          _buildServerIconButton(
-            tooltip: 'My Server',
-            child: Text(
-              'M',
-              style: AppTextStyles.headerSecondary.copyWith(
-                fontSize: 18,
-                color: AppColors.white,
+
+          // 2. HIỂN THỊ DANH SÁCH SERVER ĐỘNG
+          Expanded(
+            child: serverListState.when(
+              data: (servers) {
+                if (servers.isEmpty) {
+                  return const SizedBox.shrink(); // Không có server nào
+                }
+
+                return ListView.builder(
+                  itemCount: servers.length,
+                  itemBuilder: (context, index) {
+                    final server = servers[index];
+                    final isSelected = currentSelectedServer == server.name;
+
+                    return _buildServerIconButton(
+                      tooltip: server.name,
+                      child: Text(
+                        server.name.isNotEmpty
+                            ? server.name[0].toUpperCase()
+                            : '?',
+                        style: AppTextStyles.headerSecondary.copyWith(
+                          fontSize: 18,
+                          color: AppColors.white,
+                        ),
+                      ),
+                      isSelected: isSelected,
+                      hasIndicator: false,
+                      onTap: () {
+                        ref.read(selectedServerNameProvider.notifier).state =
+                            server.name;
+                      },
+                    );
+                  },
+                );
+              },
+              loading: () => const Center(
+                child: CircularProgressIndicator(color: AppColors.brand),
               ),
+              error: (err, stack) {
+                print('==== LỖI FIREBASE KHI LOAD SERVER ====');
+                print(err.toString());
+                return Tooltip(
+                  message: err.toString(),
+                  child: const Icon(Icons.error_outline, color: AppColors.red),
+                );
+              },
             ),
-            isSelected: true,
-            hasIndicator: true,
-            onTap: () => ref.read(selectedServerNameProvider.notifier).state =
-                'My Server',
           ),
-          const Spacer(),
+
+          // Nút Thêm Server
           _buildServerIconButton(
             tooltip: 'Thêm server',
             child: const Icon(Icons.add, color: AppColors.green, size: 20),
-            onTap: () {},
+            onTap: () => _showAddServerModal(context),
           ),
           const SizedBox(height: 12),
         ],
@@ -708,4 +758,69 @@ class HomeScreen extends ConsumerWidget {
         return AppColors.statusOffline;
     }
   }
+}
+
+void _showAddServerModal(BuildContext context) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: AppColors.bgSecondary,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (context) {
+      return SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            // Thanh kéo nhỏ (Drag handle)
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.divider,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(
+                Icons.add_circle_outline,
+                color: AppColors.white,
+              ),
+              title: const Text(
+                'Tạo Server mới',
+                style: TextStyle(color: AppColors.white),
+              ),
+              onTap: () {
+                Navigator.pop(context); // Đóng menu chọn
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CreateServerScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.group_add_outlined,
+                color: AppColors.white,
+              ),
+              title: const Text(
+                'Tham gia Server',
+                style: TextStyle(color: AppColors.white),
+              ),
+              onTap: () {
+                Navigator.pop(context); // Đóng menu chọn
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const JoinServerScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      );
+    },
+  );
 }

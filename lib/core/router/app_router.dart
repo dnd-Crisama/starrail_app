@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:starrail_app/features/server/presentation/screens/create_server_screen.dart';
+import 'package:starrail_app/features/server/presentation/screens/join_server_screen.dart';
 
 import '../constants/app_constants.dart';
 import '../router/auth_refresh_notifier.dart';
@@ -96,6 +98,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppConstants.homePath,
         builder: (_, __) => const HomeScreen(),
+      ),
+      GoRoute(
+        path: AppConstants.createServerPath,
+        builder: (_, __) => const CreateServerScreen(),
+      ),
+      GoRoute(
+        path: AppConstants.joinServerPath,
+        builder: (_, __) => const JoinServerScreen(),
       ),
     ],
     errorBuilder: (context, state) {

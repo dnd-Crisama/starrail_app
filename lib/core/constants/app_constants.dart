@@ -33,4 +33,7 @@ class AppConstants {
   // ── Firebase collection names  ──
   static const String usersCollection = 'users';
   static const String serversCollection = 'servers';
+
+  static const String createServerPath = '/create-server';
+  static const String joinServerPath = '/join-server';
 }
