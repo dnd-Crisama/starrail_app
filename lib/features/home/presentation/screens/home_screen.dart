@@ -12,13 +12,30 @@ import '../../../auth/presentation/screens/profile_screen.dart';
 import '../providers/home_provider.dart';
 import '../../../server/presentation/screens/create_server_screen.dart';
 import '../../../server/presentation/screens/join_server_screen.dart';
+import '../../../server/presentation/screens/server_settings_screen.dart';
 import '../../../server/presentation/providers/server_provider.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with SingleTickerProviderStateMixin {
+  bool _isDrawerOpen = false;
+
+  void _openDrawer() {
+    setState(() => _isDrawerOpen = true);
+  }
+
+  void _closeDrawer() {
+    setState(() => _isDrawerOpen = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < AppConstants.mobileBreakpoint;
 
@@ -26,11 +43,549 @@ class HomeScreen extends ConsumerWidget {
       backgroundColor: AppColors.bgPrimary,
       body: SafeArea(
         child: isMobile
-            ? _buildMobileLayout(context, ref)
+            ? _buildMobileLayout(context)
             : _buildDesktopLayout(context, ref),
       ),
     );
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  MOBILE LAYOUT — Discord-style with custom left drawer
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildMobileLayout(BuildContext context) {
+    final selectedServerId = ref.watch(selectedServerIdProvider);
+
+    return Stack(
+      children: [
+        // Main content
+        Scaffold(
+          backgroundColor: AppColors.bgPrimary,
+          appBar: AppBar(
+            backgroundColor: AppColors.bgTertiary,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.menu, color: AppColors.white),
+              onPressed: _openDrawer,
+            ),
+            title: GestureDetector(
+              onTap: _openDrawer,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    ref.watch(selectedServerNameProvider),
+                    style: AppTextStyles.serverName,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.expand_more,
+                    color: AppColors.interactiveNormal,
+                    size: 18,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              if (selectedServerId != null)
+                IconButton(
+                  icon: const Icon(
+                    Icons.settings_outlined,
+                    color: AppColors.interactiveNormal,
+                  ),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ServerSettingsScreen(),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          body: _buildMainContent(ref),
+        ),
+
+        // Custom Discord-style drawer overlay
+        if (_isDrawerOpen) _buildDrawerOverlay(context),
+      ],
+    );
+  }
+
+  Widget _buildDrawerOverlay(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    return GestureDetector(
+      onTap: _closeDrawer,
+      child: Container(
+        color: AppColors.scrim,
+        child: GestureDetector(
+          onTap: () {}, // Prevent tap from closing when inside drawer
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              width: screenWidth,
+              color: AppColors.bgTertiary,
+              child: _buildDrawerContent(context),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDrawerContent(BuildContext context) {
+    return Row(
+      children: [
+        // Left strip: server icons (Discord pill-style)
+        _buildDrawerServerStrip(context),
+        // Right panel: channel list + user bar
+        Expanded(child: _buildDrawerChannelPanel(context)),
+      ],
+    );
+  }
+
+  // ── Server Strip (left column with pill indicators) ──────────
+
+  Widget _buildDrawerServerStrip(BuildContext context) {
+    final serverListState = ref.watch(userServersStreamProvider);
+    final selectedServerId = ref.watch(selectedServerIdProvider);
+
+    return Container(
+      width: 72,
+      color: AppColors.bgTertiary,
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          // DM button
+          _buildDiscordServerIcon(
+            isSelected: selectedServerId == null,
+            child: const Icon(
+              Icons.chat_bubble_rounded,
+              color: AppColors.white,
+              size: 24,
+            ),
+            onTap: () {
+              ref.read(selectedServerIdProvider.notifier).state = null;
+              ref.read(selectedServerNameProvider.notifier).state =
+                  'Direct Messages';
+              _closeDrawer();
+            },
+          ),
+          // Separator
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Container(
+              width: 32,
+              height: 2,
+              decoration: BoxDecoration(
+                color: AppColors.divider,
+                borderRadius: BorderRadius.circular(1),
+              ),
+            ),
+          ),
+          // Server list
+          Expanded(
+            child: serverListState.when(
+              data: (servers) {
+                if (servers.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.only(top: 4),
+                  itemCount: servers.length,
+                  itemBuilder: (context, index) {
+                    final server = servers[index];
+                    final isSelected = selectedServerId == server.serverId;
+                    return _buildDiscordServerIcon(
+                      isSelected: isSelected,
+                      child: server.iconUrl.isNotEmpty
+                          ? ClipOval(
+                              child: Image.network(
+                                server.iconUrl,
+                                width: 28,
+                                height: 28,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Text(
+                                  server.name.isNotEmpty
+                                      ? server.name[0].toUpperCase()
+                                      : '?',
+                                  style: AppTextStyles.headerSecondary.copyWith(
+                                    fontSize: 16,
+                                    color: AppColors.white,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Text(
+                              server.name.isNotEmpty
+                                  ? server.name[0].toUpperCase()
+                                  : '?',
+                              style: AppTextStyles.headerSecondary.copyWith(
+                                fontSize: 16,
+                                color: AppColors.white,
+                              ),
+                            ),
+                      onTap: () {
+                        ref.read(selectedServerIdProvider.notifier).state =
+                            server.serverId;
+                        ref.read(selectedServerNameProvider.notifier).state =
+                            server.name;
+                        _closeDrawer();
+                      },
+                    );
+                  },
+                );
+              },
+              loading: () => const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: AppColors.brand,
+                    strokeWidth: 2,
+                  ),
+                ),
+              ),
+              error: (err, _) => const Icon(
+                Icons.error_outline,
+                color: AppColors.red,
+                size: 20,
+              ),
+            ),
+          ),
+          // Add server button
+          _buildDiscordServerIcon(
+            isSelected: false,
+            child: const Icon(Icons.add, color: AppColors.green, size: 24),
+            onTap: () {
+              _closeDrawer();
+              _showAddServerModal(context);
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
+  /// Discord-style server icon with left pill indicator
+  Widget _buildDiscordServerIcon({
+    required Widget child,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const StadiumBorder(),
+        child: Row(
+          children: [
+            // Left pill indicator (Discord style)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              width: 4,
+              height: isSelected ? 36 : 8,
+              margin: const EdgeInsets.only(right: 4),
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // Server icon circle
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: isSelected ? AppColors.brand : AppColors.bgPrimary,
+                borderRadius: BorderRadius.circular(isSelected ? 16 : 24),
+              ),
+              alignment: Alignment.center,
+              child: child,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Channel Panel (right section of drawer) ──────────────────
+
+  Widget _buildDrawerChannelPanel(BuildContext context) {
+    final serverName = ref.watch(selectedServerNameProvider);
+    final selectedServerId = ref.watch(selectedServerIdProvider);
+
+    return Container(
+      color: AppColors.bgSecondary,
+      child: Column(
+        children: [
+          // Server header bar
+          Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppColors.divider, width: 1),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    serverName,
+                    style: AppTextStyles.serverName,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (selectedServerId != null)
+                  IconButton(
+                    icon: const Icon(
+                      Icons.settings_outlined,
+                      color: AppColors.interactiveNormal,
+                      size: 18,
+                    ),
+                    onPressed: () {
+                      _closeDrawer();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ServerSettingsScreen(),
+                        ),
+                      );
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.expand_more,
+                  color: AppColors.interactiveNormal,
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+          // Channel list
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: [
+                _buildCategoryHeader('TEXT CHANNELS'),
+                _buildChannelItem(
+                  name: 'general',
+                  isSelected: true,
+                  onTap: _closeDrawer,
+                ),
+                _buildChannelItem(name: 'random', onTap: _closeDrawer),
+                const SizedBox(height: 16),
+                _buildCategoryHeader('VOICE CHANNELS'),
+                _buildChannelItem(
+                  name: 'General Voice',
+                  isVoice: true,
+                  onTap: _closeDrawer,
+                ),
+              ],
+            ),
+          ),
+          // User panel at bottom (Discord-style)
+          _buildDrawerUserPanel(context),
+        ],
+      ),
+    );
+  }
+
+  /// Discord-style user panel at bottom of drawer
+  Widget _buildDrawerUserPanel(BuildContext context) {
+    final profileState = ref.watch(profileNotifierProvider);
+    final user = profileState.user ?? ref.watch(authNotifierProvider).user;
+
+    final displayName = user?.username ?? 'Unknown';
+    final statusText = _mapStatusToString(user?.status);
+    final statusColor = _getStatusColor(user?.status);
+    final avatarUrl = user?.avatarUrl ?? '';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: const BoxDecoration(color: Color(0xFF232428)),
+      child: Row(
+        children: [
+          // Avatar with status indicator
+          GestureDetector(
+            onTap: () {
+              _closeDrawer();
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              );
+            },
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                _buildUserAvatar(
+                  displayName: displayName,
+                  size: 32,
+                  backgroundImage: avatarUrl,
+                ),
+                Positioned(
+                  bottom: -2,
+                  right: -2,
+                  child: Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFF232428),
+                        width: 2.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Username + status
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                _closeDrawer();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                );
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    displayName,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.headerPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    statusText,
+                    style: AppTextStyles.textMutedSmall.copyWith(
+                      color: statusColor,
+                      fontSize: 11,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Mic icon
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: IconButton(
+              icon: const Icon(
+                Icons.mic_outlined,
+                color: AppColors.interactiveNormal,
+                size: 18,
+              ),
+              onPressed: () {},
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ),
+          // Headset icon
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: IconButton(
+              icon: const Icon(
+                Icons.headset_outlined,
+                color: AppColors.interactiveNormal,
+                size: 18,
+              ),
+              onPressed: () {},
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ),
+          // Settings gear icon
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: PopupMenuButton<String>(
+              icon: const Icon(
+                Icons.settings_rounded,
+                color: AppColors.interactiveNormal,
+                size: 18,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4),
+              ),
+              color: AppColors.bgFloating,
+              onSelected: (value) {
+                _closeDrawer();
+                if (value == 'logout') {
+                  ref.read(authNotifierProvider.notifier).logout();
+                }
+                if (value == 'profile') {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                  );
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'profile',
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.person,
+                        color: AppColors.interactiveNormal,
+                        size: 20,
+                      ),
+                      SizedBox(width: 10),
+                      Text('Hồ sơ của tôi', style: AppTextStyles.bodySecondary),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout, color: AppColors.red, size: 20),
+                      SizedBox(width: 10),
+                      Text(
+                        'Đăng xuất',
+                        style: TextStyle(
+                          color: AppColors.red,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  DESKTOP LAYOUT
+  // ═══════════════════════════════════════════════════════════════
 
   Widget _buildDesktopLayout(BuildContext context, WidgetRef ref) {
     return Row(
@@ -42,146 +597,10 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildMobileLayout(BuildContext context, WidgetRef ref) {
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      appBar: AppBar(
-        backgroundColor: AppColors.bgTertiary,
-        elevation: 0,
-        leading: Builder(
-          builder: (context) {
-            return IconButton(
-              icon: const Icon(Icons.menu, color: AppColors.white),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            );
-          },
-        ),
-        title: Text(
-          ref.watch(selectedServerNameProvider),
-          style: AppTextStyles.serverName,
-        ),
-      ),
-      drawer: Drawer(
-        backgroundColor: AppColors.bgSecondary,
-        child: Column(
-          children: [
-            Container(
-              height: 48,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              alignment: Alignment.centerLeft,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      ref.watch(selectedServerNameProvider),
-                      style: AppTextStyles.serverName,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const Icon(
-                    Icons.expand_more,
-                    color: AppColors.interactiveNormal,
-                    size: 18,
-                  ),
-                ],
-              ),
-            ),
-            const Divider(color: AppColors.divider, height: 1),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                children: [
-                  _buildCategoryHeader('TEXT CHANNELS'),
-                  _buildChannelItem(
-                    name: 'general',
-                    isSelected: true,
-                    onTap: () => Navigator.pop(context),
-                  ),
-                  _buildChannelItem(
-                    name: 'random',
-                    onTap: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-            // TRUYỀN CONTEXT VÀO ĐÂY
-            _buildMobileUserPanel(context, ref),
-          ],
-        ),
-      ),
-      body: _buildMainContent(ref),
-    );
-  }
-
-  // ── MOBILE USER PANEL ──────────────────────────────────────
-  Widget _buildMobileUserPanel(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authNotifierProvider);
-    final user = authState.user;
-    final displayName = user?.username ?? 'Unknown';
-    final avatarUrl = user?.avatarUrl ?? '';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: const BoxDecoration(
-        color: Color(0xFF232428),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(4),
-          topRight: Radius.circular(4),
-        ),
-      ),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
-            ),
-            // SỬA Ở ĐÂY: Thêm backgroundImage: avatarUrl
-            child: _buildUserAvatar(
-              displayName: displayName,
-              size: 32,
-              backgroundImage: avatarUrl,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProfileScreen()),
-              ),
-              child: Text(
-                displayName,
-                style: AppTextStyles.bodySecondary.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.headerPrimary,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-          TextButton.icon(
-            onPressed: () => ref.read(authNotifierProvider.notifier).logout(),
-            icon: const Icon(Icons.logout, color: AppColors.red, size: 18),
-            label: const Text(
-              'Thoát',
-              style: TextStyle(color: AppColors.red, fontSize: 14),
-            ),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── SERVER LIST ────────────────────────────────────────────
+  // ── SERVER LIST (Desktop) ────────────────────────────────────
   Widget _buildServerList(BuildContext context, WidgetRef ref) {
     final serverListState = ref.watch(userServersStreamProvider);
-
-    // Đọc server đang được chọn để highlight
-    final currentSelectedServer = ref.watch(selectedServerNameProvider);
+    final selectedServerId = ref.watch(selectedServerIdProvider);
 
     return Container(
       width: AppConstants.serverListWidth,
@@ -190,10 +609,8 @@ class HomeScreen extends ConsumerWidget {
         children: [
           const SizedBox(height: 12),
 
-          // Nút Direct Messages (Giữ nguyên)
           _buildServerIconButton(
-            isSelected:
-                currentSelectedServer == 'Direct Messages', // Thêm logic chọn
+            isSelected: selectedServerId == null,
             tooltip: 'Direct Messages',
             child: const Icon(
               Icons.chat_bubble_rounded,
@@ -201,6 +618,7 @@ class HomeScreen extends ConsumerWidget {
               size: 28,
             ),
             onTap: () {
+              ref.read(selectedServerIdProvider.notifier).state = null;
               ref.read(selectedServerNameProvider.notifier).state =
                   'Direct Messages';
             },
@@ -216,34 +634,53 @@ class HomeScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
 
-          // 2. HIỂN THỊ DANH SÁCH SERVER ĐỘNG
           Expanded(
             child: serverListState.when(
               data: (servers) {
                 if (servers.isEmpty) {
-                  return const SizedBox.shrink(); // Không có server nào
+                  return const SizedBox.shrink();
                 }
 
                 return ListView.builder(
                   itemCount: servers.length,
                   itemBuilder: (context, index) {
                     final server = servers[index];
-                    final isSelected = currentSelectedServer == server.name;
+                    final isSelected = selectedServerId == server.serverId;
 
                     return _buildServerIconButton(
                       tooltip: server.name,
-                      child: Text(
-                        server.name.isNotEmpty
-                            ? server.name[0].toUpperCase()
-                            : '?',
-                        style: AppTextStyles.headerSecondary.copyWith(
-                          fontSize: 18,
-                          color: AppColors.white,
-                        ),
-                      ),
+                      child: server.iconUrl.isNotEmpty
+                          ? ClipOval(
+                              child: Image.network(
+                                server.iconUrl,
+                                width: 28,
+                                height: 28,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Text(
+                                  server.name.isNotEmpty
+                                      ? server.name[0].toUpperCase()
+                                      : '?',
+                                  style: AppTextStyles.headerSecondary.copyWith(
+                                    fontSize: 18,
+                                    color: AppColors.white,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Text(
+                              server.name.isNotEmpty
+                                  ? server.name[0].toUpperCase()
+                                  : '?',
+                              style: AppTextStyles.headerSecondary.copyWith(
+                                fontSize: 18,
+                                color: AppColors.white,
+                              ),
+                            ),
                       isSelected: isSelected,
                       hasIndicator: false,
                       onTap: () {
+                        ref.read(selectedServerIdProvider.notifier).state =
+                            server.serverId;
                         ref.read(selectedServerNameProvider.notifier).state =
                             server.name;
                       },
@@ -255,8 +692,10 @@ class HomeScreen extends ConsumerWidget {
                 child: CircularProgressIndicator(color: AppColors.brand),
               ),
               error: (err, stack) {
-                print('==== LỖI FIREBASE KHI LOAD SERVER ====');
-                print(err.toString());
+                Logger.error(
+                  'Firebase load servers error: $err',
+                  tag: 'HomeScreen',
+                );
                 return Tooltip(
                   message: err.toString(),
                   child: const Icon(Icons.error_outline, color: AppColors.red),
@@ -265,7 +704,6 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
 
-          // Nút Thêm Server
           _buildServerIconButton(
             tooltip: 'Thêm server',
             child: const Icon(Icons.add, color: AppColors.green, size: 20),
@@ -318,9 +756,11 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  // ── CHANNEL SIDEBAR ────────────────────────────────────────
+  // ── CHANNEL SIDEBAR (Desktop) ────────────────────────────────
   Widget _buildChannelSidebar(BuildContext context, WidgetRef ref) {
     final serverName = ref.watch(selectedServerNameProvider);
+    final selectedServerId = ref.watch(selectedServerIdProvider);
+
     return Container(
       width: AppConstants.channelSidebarWidth,
       color: AppColors.bgSecondary,
@@ -339,6 +779,23 @@ class HomeScreen extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (selectedServerId != null)
+                  IconButton(
+                    icon: const Icon(
+                      Icons.settings_outlined,
+                      color: AppColors.interactiveNormal,
+                      size: 18,
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ServerSettingsScreen(),
+                      ),
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                const SizedBox(width: 4),
                 const Icon(
                   Icons.expand_more,
                   color: AppColors.interactiveNormal,
@@ -376,7 +833,6 @@ class HomeScreen extends ConsumerWidget {
               ],
             ),
           ),
-          // TRUYỀN CONTEXT VÀO ĐÂY
           _buildDesktopUserPanel(context, ref),
         ],
       ),
@@ -559,7 +1015,10 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  // ── SHARED UI COMPONENTS ───────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  SHARED UI COMPONENTS
+  // ═══════════════════════════════════════════════════════════════
+
   Widget _buildCategoryHeader(String name) {
     return Padding(
       padding: const EdgeInsets.only(left: 16, right: 8, top: 16, bottom: 4),
@@ -773,7 +1232,6 @@ void _showAddServerModal(BuildContext context) {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 8),
-            // Thanh kéo nhỏ (Drag handle)
             Container(
               width: 40,
               height: 4,
@@ -793,7 +1251,7 @@ void _showAddServerModal(BuildContext context) {
                 style: TextStyle(color: AppColors.white),
               ),
               onTap: () {
-                Navigator.pop(context); // Đóng menu chọn
+                Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const CreateServerScreen()),
@@ -810,7 +1268,7 @@ void _showAddServerModal(BuildContext context) {
                 style: TextStyle(color: AppColors.white),
               ),
               onTap: () {
-                Navigator.pop(context); // Đóng menu chọn
+                Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const JoinServerScreen()),

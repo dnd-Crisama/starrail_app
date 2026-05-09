@@ -31,6 +31,11 @@ class AuthException extends AppException {
   const AuthException({required super.message, super.code});
 }
 
+/// Lỗi không đủ quyền.
+class PermissionException extends AppException {
+  const PermissionException({required super.message, super.code});
+}
+
 /// Lỗi upload file.
 class StorageException extends AppException {
   const StorageException({required super.message, super.code});

@@ -13,6 +13,7 @@ import '../../domain/usecases/join_server_usecase.dart';
 import '../../domain/usecases/leave_server_usecase.dart';
 import '../../data/datasources/server_remote_datasource.dart';
 import '../../data/repositories/server_repository_impl.dart';
+import '../../../auth/data/models/user_model.dart';
 
 // ── Dependency Injection ───────────────────────────────────────
 
@@ -176,3 +177,119 @@ final joinServerNotifierProvider =
     StateNotifierProvider<JoinServerNotifier, JoinServerState>((ref) {
       return JoinServerNotifier(useCase: ref.watch(joinServerUseCaseProvider));
     });
+
+// ── Server Settings State & Notifier ────────────────────────────
+
+class ServerSettingsState {
+  final bool isLoading;
+  final String? errorMessage;
+  final bool actionCompleted;
+
+  const ServerSettingsState({
+    this.isLoading = false,
+    this.errorMessage,
+    this.actionCompleted = false,
+  });
+
+  ServerSettingsState copyWith({
+    bool? isLoading,
+    String? errorMessage,
+    bool? actionCompleted,
+  }) {
+    return ServerSettingsState(
+      isLoading: isLoading ?? this.isLoading,
+      errorMessage: errorMessage,
+      actionCompleted: actionCompleted ?? this.actionCompleted,
+    );
+  }
+}
+
+class ServerSettingsNotifier extends StateNotifier<ServerSettingsState> {
+  final LeaveServerUseCase _leaveServerUseCase;
+  final DeleteServerUseCase _deleteServerUseCase;
+
+  ServerSettingsNotifier({
+    required LeaveServerUseCase leaveServerUseCase,
+    required DeleteServerUseCase deleteServerUseCase,
+  }) : _leaveServerUseCase = leaveServerUseCase,
+       _deleteServerUseCase = deleteServerUseCase,
+       super(const ServerSettingsState());
+
+  Future<bool> leaveServer({required String serverId}) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    final result = await _leaveServerUseCase(
+      LeaveServerParams(serverId: serverId),
+    );
+    return result.fold(
+      ifLeft: (failure) {
+        state = state.copyWith(isLoading: false, errorMessage: failure.message);
+        return false;
+      },
+      ifRight: (_) {
+        state = state.copyWith(isLoading: false, actionCompleted: true);
+        return true;
+      },
+    );
+  }
+
+  Future<bool> deleteServer({required String serverId}) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    final result = await _deleteServerUseCase(
+      DeleteServerParams(serverId: serverId),
+    );
+    return result.fold(
+      ifLeft: (failure) {
+        state = state.copyWith(isLoading: false, errorMessage: failure.message);
+        return false;
+      },
+      ifRight: (_) {
+        state = state.copyWith(isLoading: false, actionCompleted: true);
+        return true;
+      },
+    );
+  }
+
+  void clearError() {
+    state = state.copyWith(errorMessage: null);
+  }
+}
+
+final serverSettingsNotifierProvider =
+    StateNotifierProvider<ServerSettingsNotifier, ServerSettingsState>((ref) {
+      return ServerSettingsNotifier(
+        leaveServerUseCase: ref.watch(leaveServerUseCaseProvider),
+        deleteServerUseCase: ref.watch(deleteServerUseCaseProvider),
+      );
+    });
+
+// ── Provider kiểm tra user có phải owner của server không ───────
+
+final isServerOwnerProvider = Provider.family<bool, String>((ref, serverId) {
+  final serversAsync = ref.watch(userServersStreamProvider);
+  final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+  return serversAsync.maybeWhen(
+    data: (servers) {
+      final server = servers.where((s) => s.serverId == serverId).firstOrNull;
+      return server?.ownerId == currentUserId;
+    },
+    orElse: () => false,
+  );
+});
+
+// ── Provider lấy thông tin user (owner) theo userId ──────────────
+
+final ownerUserProfileProvider = FutureProvider.family<UserModel?, String>((
+  ref,
+  userId,
+) async {
+  try {
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .get();
+    if (!doc.exists) return null;
+    return UserModel.fromFirestore(doc.data()!, doc.id);
+  } catch (e) {
+    return null;
+  }
+});

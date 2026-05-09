@@ -37,6 +37,11 @@ class AuthFailure extends Failure {
   List<Object?> get props => [message, code];
 }
 
+/// Lỗi không đủ quyền.
+class PermissionFailure extends Failure {
+  const PermissionFailure({required super.message});
+}
+
 /// Lỗi upload/storage.
 class StorageFailure extends Failure {
   const StorageFailure({required super.message});

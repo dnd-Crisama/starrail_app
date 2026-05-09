@@ -60,16 +60,30 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
         updatedAt: DateTime.now(),
       );
 
-      // Batch write: server doc + member doc
+      // Batch write: server doc + member doc + default @everyone role
       final batch = firestore.batch();
       batch.set(newServerRef, serverModel.toFirestore());
+
+      // Tạo @everyone role mặc định
+      final defaultRoleRef = newServerRef.collection('roles').doc();
+      batch.set(defaultRoleRef, {
+        'serverId': newServerRef.id,
+        'name': '@everyone',
+        'color': 0xFF99AAB5,
+        'permissions': ['VIEW_CHANNEL', 'SEND_MESSAGE', 'CONNECT'],
+        'hierarchyLevel': 0,
+        'isDefault': true,
+        'isManagedBySystem': false,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
 
       final memberRef = newServerRef.collection('members').doc(currentUser.uid);
       final memberModel = ServerMemberModel(
         userId: currentUser.uid,
         serverId: newServerRef.id,
         joinedAt: DateTime.now(),
-        roleIds: [], // Owner sẽ được gán role sau ở PART 5
+        roleIds: [defaultRoleRef.id],
       );
       batch.set(memberRef, memberModel.toFirestore());
 
@@ -121,12 +135,25 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
         throw const ServerException(message: 'Already member of this server');
       }
 
-      // Thêm user vào members
+      // Tìm default @everyone role để gán cho member mới
+      final defaultRoleQuery = await firestore
+          .collection('servers')
+          .doc(serverId)
+          .collection('roles')
+          .where('isDefault', isEqualTo: true)
+          .limit(1)
+          .get();
+
+      final defaultRoleId = defaultRoleQuery.docs.isNotEmpty
+          ? defaultRoleQuery.docs.first.id
+          : '';
+
+      // Thêm user vào members với @everyone role
       final memberModel = ServerMemberModel(
         userId: currentUser.uid,
         serverId: serverId,
         joinedAt: DateTime.now(),
-        roleIds: [],
+        roleIds: defaultRoleId.isNotEmpty ? [defaultRoleId] : [],
       );
 
       await firestore

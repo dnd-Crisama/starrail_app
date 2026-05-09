@@ -15,6 +15,8 @@ import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/create_profile_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
+import '../../features/server/presentation/screens/role_management_screen.dart';
+import '../../features/server/presentation/screens/server_settings_screen.dart';
 
 final _authRefreshNotifier = AuthRefreshNotifier();
 
@@ -106,6 +108,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppConstants.joinServerPath,
         builder: (_, __) => const JoinServerScreen(),
+      ),
+      GoRoute(
+        path: AppConstants.roleManagementPath,
+        builder: (_, __) => const RoleManagementScreen(),
+      ),
+      GoRoute(
+        path: AppConstants.serverSettingsPath,
+        builder: (_, __) => const ServerSettingsScreen(),
       ),
     ],
     errorBuilder: (context, state) {
