@@ -32,7 +32,10 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
         password: password,
       );
     } on FirebaseAuthException catch (e) {
-      throw AuthException(message: e.message ?? 'Login failed', code: e.code);
+      throw AuthException(
+        message: e.message ?? 'Đăng nhập thất bại',
+        code: e.code,
+      );
     }
   }
 
@@ -48,7 +51,7 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
       );
     } on FirebaseAuthException catch (e) {
       throw AuthException(
-        message: e.message ?? 'Registration failed',
+        message: e.message ?? 'Đăng ký thất bại',
         code: e.code,
       );
     }

@@ -42,7 +42,7 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
     try {
       final currentUser = auth.currentUser;
       if (currentUser == null) {
-        throw const AuthException(message: 'User not authenticated');
+        throw const AuthException(message: 'Người dùng chưa xác thực');
       }
 
       // Sinh inviteCode duy nhất
@@ -78,6 +78,34 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      // Tạo kênh văn bản mặc định "general"
+      final defaultChannelRef = newServerRef.collection('channels').doc();
+      batch.set(defaultChannelRef, {
+        'serverId': newServerRef.id,
+        'name': 'general',
+        'type': 'text',
+        'categoryId': '',
+        'position': 0,
+        'topic': 'Kênh trò chuyện chung',
+        'isDefault': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Tạo kênh thoại mặc định "Chung"
+      final defaultVoiceRef = newServerRef.collection('channels').doc();
+      batch.set(defaultVoiceRef, {
+        'serverId': newServerRef.id,
+        'name': 'Chung',
+        'type': 'voice',
+        'categoryId': '',
+        'position': 1,
+        'topic': '',
+        'isDefault': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
       final memberRef = newServerRef.collection('members').doc(currentUser.uid);
       final memberModel = ServerMemberModel(
         userId: currentUser.uid,
@@ -96,7 +124,7 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
 
       return serverModel;
     } catch (e) {
-      throw ServerException(message: 'Failed to create server: $e');
+      throw ServerException(message: 'Tạo server thất bại: $e');
     }
   }
 
@@ -105,7 +133,7 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
     try {
       final currentUser = auth.currentUser;
       if (currentUser == null) {
-        throw const AuthException(message: 'User not authenticated');
+        throw const AuthException(message: 'Người dùng chưa xác thực');
       }
 
       // Tìm server theo inviteCode
@@ -116,7 +144,7 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
           .get();
 
       if (serverQuery.docs.isEmpty) {
-        throw const ServerException(message: 'Invalid invite code');
+        throw const ServerException(message: 'Mã lời mời không hợp lệ');
       }
 
       final serverDoc = serverQuery.docs.first;
@@ -132,7 +160,9 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
           .get();
 
       if (memberDoc.exists) {
-        throw const ServerException(message: 'Already member of this server');
+        throw const ServerException(
+          message: 'Bạn đã là thành viên của server này',
+        );
       }
 
       // Tìm default @everyone role để gán cho member mới
@@ -168,7 +198,7 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
       return ServerModel.fromFirestore(serverData, serverId);
     } catch (e) {
       if (e is ServerException) rethrow;
-      throw ServerException(message: 'Failed to join server: $e');
+      throw ServerException(message: 'Tham gia server thất bại: $e');
     }
   }
 
@@ -184,13 +214,14 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
           .doc(serverId)
           .get();
       if (!serverDoc.exists) {
-        throw const ServerException(message: 'Server not found');
+        throw const ServerException(message: 'Không tìm thấy server');
       }
 
       final ownerId = serverDoc.data()?['ownerId'] as String?;
       if (ownerId == userId) {
         throw const ServerException(
-          message: 'Owner cannot leave. Transfer ownership first.',
+          message:
+              'Chủ sở hữu không thể rời đi. Hãy chuyển quyền sở hữu trước.',
         );
       }
 
@@ -205,7 +236,7 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
       Logger.info('User left server: $serverId', tag: 'ServerDatasource');
     } catch (e) {
       if (e is ServerException) rethrow;
-      throw ServerException(message: 'Failed to leave server: $e');
+      throw ServerException(message: 'Rời server thất bại: $e');
     }
   }
 
@@ -221,12 +252,14 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
           .doc(serverId)
           .get();
       if (!serverDoc.exists) {
-        throw const ServerException(message: 'Server not found');
+        throw const ServerException(message: 'Không tìm thấy server');
       }
 
       final ownerId = serverDoc.data()?['ownerId'] as String?;
       if (ownerId != userId) {
-        throw const ServerException(message: 'Only owner can delete server');
+        throw const ServerException(
+          message: 'Chỉ chủ sở hữu mới có thể xóa server',
+        );
       }
 
       // Xóa toàn bộ members
@@ -249,7 +282,7 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
       Logger.info('Server deleted: $serverId', tag: 'ServerDatasource');
     } catch (e) {
       if (e is ServerException) rethrow;
-      throw ServerException(message: 'Failed to delete server: $e');
+      throw ServerException(message: 'Xóa server thất bại: $e');
     }
   }
 
@@ -310,13 +343,13 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
           .doc(serverId)
           .get();
       if (!serverDoc.exists) {
-        throw const ServerException(message: 'Server not found');
+        throw const ServerException(message: 'Không tìm thấy server');
       }
 
       return ServerModel.fromFirestore(serverDoc.data() ?? {}, serverDoc.id);
     } catch (e) {
       if (e is ServerException) rethrow;
-      throw ServerException(message: 'Failed to get server: $e');
+      throw ServerException(message: 'Lấy thông tin server thất bại: $e');
     }
   }
 
@@ -335,7 +368,9 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
 
       return memberDoc.exists;
     } catch (e) {
-      throw ServerException(message: 'Failed to check membership: $e');
+      throw ServerException(
+        message: 'Kiểm tra tư cách thành viên thất bại: $e',
+      );
     }
   }
 

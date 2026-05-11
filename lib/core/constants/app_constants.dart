@@ -34,9 +34,11 @@ class AppConstants {
   static const String usersCollection = 'users';
   static const String serversCollection = 'servers';
   static const String rolesSubcollection = 'roles';
+  static const String channelsSubcollection = 'channels';
 
   static const String createServerPath = '/create-server';
   static const String joinServerPath = '/join-server';
   static const String roleManagementPath = '/role-management';
   static const String serverSettingsPath = '/server-settings';
+  static const String channelManagementPath = '/channel-management';
 }

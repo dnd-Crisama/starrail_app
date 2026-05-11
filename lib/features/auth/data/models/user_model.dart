@@ -107,6 +107,8 @@ class UserModel {
         return UserStatus.idle;
       case 'DND':
         return UserStatus.dnd;
+      case 'INVISIBLE':
+        return UserStatus.invisible;
       default:
         return UserStatus.offline;
     }

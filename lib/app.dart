@@ -18,6 +18,11 @@ class _AppLifecycleObserver extends WidgetsBindingObserver {
     final user = ref.read(profileNotifierProvider).user;
     if (user == null) return;
 
+    // Không ghi đè trạng thái nếu người dùng đã chọn Vô hình hoặc Không làm phiền
+    if (user.status == UserStatus.invisible || user.status == UserStatus.dnd) {
+      return;
+    }
+
     switch (state) {
       case AppLifecycleState.resumed:
         // App mở lên -> Online

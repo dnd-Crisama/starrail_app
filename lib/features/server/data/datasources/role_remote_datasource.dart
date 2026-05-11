@@ -71,7 +71,7 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
     try {
       final currentUser = auth.currentUser;
       if (currentUser == null) {
-        throw const AuthException(message: 'User not authenticated');
+        throw const AuthException(message: 'Người dùng chưa xác thực');
       }
 
       final roleRef = firestore
@@ -103,7 +103,7 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
       return roleModel;
     } catch (e) {
       if (e is AppException) rethrow;
-      throw ServerException(message: 'Failed to create role: $e');
+      throw ServerException(message: 'Tạo vai trò thất bại: $e');
     }
   }
 
@@ -125,14 +125,14 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
 
       final roleDoc = await roleRef.get();
       if (!roleDoc.exists) {
-        throw const ServerException(message: 'Role not found');
+        throw const ServerException(message: 'Không tìm thấy vai trò');
       }
 
       final existing = RoleModel.fromFirestore(roleDoc.data()!, roleDoc.id);
 
       if (existing.isDefault && name != null && name != existing.name) {
         throw const ServerException(
-          message: 'Cannot rename the default @everyone role',
+          message: 'Không thể đổi tên vai trò mặc định @everyone',
         );
       }
 
@@ -152,7 +152,7 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
       return RoleModel.fromFirestore(updatedDoc.data()!, updatedDoc.id);
     } catch (e) {
       if (e is AppException) rethrow;
-      throw ServerException(message: 'Failed to update role: $e');
+      throw ServerException(message: 'Cập nhật vai trò thất bại: $e');
     }
   }
 
@@ -170,13 +170,13 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
 
       final roleDoc = await roleRef.get();
       if (!roleDoc.exists) {
-        throw const ServerException(message: 'Role not found');
+        throw const ServerException(message: 'Không tìm thấy vai trò');
       }
 
       final roleData = roleDoc.data()!;
       if (roleData['isDefault'] == true) {
         throw const ServerException(
-          message: 'Cannot delete the default @everyone role',
+          message: 'Không thể xóa vai trò mặc định @everyone',
         );
       }
 
@@ -206,7 +206,7 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
       );
     } catch (e) {
       if (e is AppException) rethrow;
-      throw ServerException(message: 'Failed to delete role: $e');
+      throw ServerException(message: 'Xóa vai trò thất bại: $e');
     }
   }
 
@@ -240,7 +240,9 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
 
       final memberDoc = await memberRef.get();
       if (!memberDoc.exists) {
-        throw const ServerException(message: 'Member not found in server');
+        throw const ServerException(
+          message: 'Không tìm thấy thành viên trong server',
+        );
       }
 
       await memberRef.update({
@@ -253,7 +255,7 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
       );
     } catch (e) {
       if (e is AppException) rethrow;
-      throw ServerException(message: 'Failed to assign role: $e');
+      throw ServerException(message: 'Gán vai trò thất bại: $e');
     }
   }
 
@@ -272,7 +274,9 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
 
       final memberDoc = await memberRef.get();
       if (!memberDoc.exists) {
-        throw const ServerException(message: 'Member not found in server');
+        throw const ServerException(
+          message: 'Không tìm thấy thành viên trong server',
+        );
       }
 
       await memberRef.update({
@@ -285,7 +289,7 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
       );
     } catch (e) {
       if (e is AppException) rethrow;
-      throw ServerException(message: 'Failed to remove role: $e');
+      throw ServerException(message: 'Gỡ vai trò thất bại: $e');
     }
   }
 
@@ -301,14 +305,14 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
           .get();
 
       if (query.docs.isEmpty) {
-        throw const ServerException(message: 'Default role not found');
+        throw const ServerException(message: 'Không tìm thấy vai trò mặc định');
       }
 
       final doc = query.docs.first;
       return RoleModel.fromFirestore(doc.data(), doc.id);
     } catch (e) {
       if (e is AppException) rethrow;
-      throw ServerException(message: 'Failed to get default role: $e');
+      throw ServerException(message: 'Lấy vai trò mặc định thất bại: $e');
     }
   }
 

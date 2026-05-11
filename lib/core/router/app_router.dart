@@ -17,6 +17,7 @@ import '../../features/auth/presentation/screens/create_profile_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/server/presentation/screens/role_management_screen.dart';
 import '../../features/server/presentation/screens/server_settings_screen.dart';
+import '../../features/server/presentation/screens/channel_management_screen.dart';
 
 final _authRefreshNotifier = AuthRefreshNotifier();
 
@@ -117,6 +118,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppConstants.serverSettingsPath,
         builder: (_, __) => const ServerSettingsScreen(),
       ),
+      GoRoute(
+        path: AppConstants.channelManagementPath,
+        builder: (_, __) => const ChannelManagementScreen(),
+      ),
     ],
     errorBuilder: (context, state) {
       Logger.error('Route not found: ${state.matchedLocation}', tag: 'Router');
@@ -128,16 +133,19 @@ final routerProvider = Provider<GoRouter>((ref) {
             children: [
               const Icon(Icons.error_outline, color: AppColors.red, size: 48),
               const SizedBox(height: 16),
-              const Text('Page not found', style: AppTextStyles.headerPrimary),
+              const Text(
+                'Không tìm thấy trang',
+                style: AppTextStyles.headerPrimary,
+              ),
               const SizedBox(height: 8),
               const Text(
-                'The page you are looking for does not exist.',
+                'Trang bạn đang tìm không tồn tại.',
                 style: AppTextStyles.textMuted,
               ),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () => context.go(AppConstants.homePath),
-                child: const Text('Go Home'),
+                child: const Text('Về trang chủ'),
               ),
             ],
           ),

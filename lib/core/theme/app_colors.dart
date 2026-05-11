@@ -60,4 +60,5 @@ class AppColors {
   static const Color statusIdle = Color(0xFFF0B232);
   static const Color statusDnd = Color(0xFFDA373C);
   static const Color statusOffline = Color(0xFF80848E);
+  static const Color statusInvisible = Color(0xFF80848E);
 }

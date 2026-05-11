@@ -72,7 +72,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
        _updateStatusUseCase = updateStatusUseCase,
        _storageDatasource = storageDatasource,
        _ref = ref,
-       super(const ProfileState());
+       super(ProfileState(user: ref.read(authNotifierProvider).user));
 
   Future<void> updateAvatar(XFile imageFile) async {
     state = state.copyWith(isUpdating: true, errorMessage: null);
@@ -120,19 +120,29 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
   }
 
   Future<void> updatePresenceStatus(UserStatus status) async {
-    final result = await _updateStatusUseCase(
-      UpdateStatusParams(status: status),
-    );
-    result.fold(
-      ifLeft: (failure) => null,
-      ifRight: (_) {
-        if (state.user != null) {
-          final updatedUser = state.user!.copyWith(status: status);
-          state = state.copyWith(user: updatedUser);
-          _syncAuthState(updatedUser);
-        }
-      },
-    );
+    // Cập nhật optimistic (ngay lập tức) để UI phản hồi tức thì
+    final currentUser = state.user ?? _ref.read(authNotifierProvider).user;
+    if (currentUser != null) {
+      final updatedUser = currentUser.copyWith(status: status);
+      final previousState = state;
+      state = state.copyWith(user: updatedUser);
+      _syncAuthState(updatedUser);
+
+      // Lưu vào Firestore — nếu thất bại thì hoàn tác
+      final result = await _updateStatusUseCase(
+        UpdateStatusParams(status: status),
+      );
+      result.fold(
+        ifLeft: (failure) {
+          // Hoàn tác về trạng thái cũ nếu Firestore thất bại
+          state = previousState;
+          _syncAuthState(previousState.user ?? currentUser);
+        },
+        ifRight: (_) {
+          // Firestore thành công — trạng thái đã được cập nhật optimistic
+        },
+      );
+    }
   }
 
   void _syncAuthState(UserEntity updatedUser) {

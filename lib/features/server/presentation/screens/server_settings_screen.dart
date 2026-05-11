@@ -6,6 +6,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 import '../providers/server_provider.dart';
 import 'role_management_screen.dart';
+import 'channel_management_screen.dart';
 
 class ServerSettingsScreen extends ConsumerWidget {
   const ServerSettingsScreen({super.key});
@@ -374,6 +375,15 @@ class ServerSettingsScreen extends ConsumerWidget {
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const RoleManagementScreen()),
+          ),
+        ),
+        _buildNavigationItem(
+          icon: Icons.tag_outlined,
+          title: 'Quản lý kênh',
+          subtitle: 'Tạo, sửa, xóa kênh văn bản và thoại',
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ChannelManagementScreen()),
           ),
         ),
       ],

@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 
-enum UserStatus { offline, online, idle, dnd }
+enum UserStatus { offline, online, idle, dnd, invisible }
 
 class UserEntity extends Equatable {
   final String uid;

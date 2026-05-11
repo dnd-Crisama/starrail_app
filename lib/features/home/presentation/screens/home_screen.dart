@@ -14,6 +14,8 @@ import '../../../server/presentation/screens/create_server_screen.dart';
 import '../../../server/presentation/screens/join_server_screen.dart';
 import '../../../server/presentation/screens/server_settings_screen.dart';
 import '../../../server/presentation/providers/server_provider.dart';
+import '../../../server/presentation/providers/channel_provider.dart';
+import '../../../server/domain/entities/channel_entity.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -55,6 +57,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   Widget _buildMobileLayout(BuildContext context) {
     final selectedServerId = ref.watch(selectedServerIdProvider);
+    final channelInfo = ref.watch(selectedChannelInfoProvider);
+
+    // Trên mobile: hiện tên kênh nếu đã chọn, ngược lại hiện tên server
+    final appBarTitle = channelInfo != null
+        ? '# ${channelInfo.name}'
+        : ref.watch(selectedServerNameProvider);
 
     return Stack(
       children: [
@@ -74,7 +82,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    ref.watch(selectedServerNameProvider),
+                    appBarTitle,
                     style: AppTextStyles.serverName,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -371,24 +379,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
           // Channel list
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              children: [
-                _buildCategoryHeader('TEXT CHANNELS'),
-                _buildChannelItem(
-                  name: 'general',
-                  isSelected: true,
-                  onTap: _closeDrawer,
-                ),
-                _buildChannelItem(name: 'random', onTap: _closeDrawer),
-                const SizedBox(height: 16),
-                _buildCategoryHeader('VOICE CHANNELS'),
-                _buildChannelItem(
-                  name: 'General Voice',
-                  isVoice: true,
-                  onTap: _closeDrawer,
-                ),
-              ],
+            child: _buildChannelList(
+              selectedServerId,
+              onChannelSelected: _closeDrawer,
             ),
           ),
           // User panel at bottom (Discord-style)
@@ -414,40 +407,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       child: Row(
         children: [
           // Avatar with status indicator
-          GestureDetector(
-            onTap: () {
-              _closeDrawer();
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProfileScreen()),
-              );
-            },
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                _buildUserAvatar(
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              GestureDetector(
+                onTap: () {
+                  _closeDrawer();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                  );
+                },
+                child: _buildUserAvatar(
                   displayName: displayName,
                   size: 32,
                   backgroundImage: avatarUrl,
                 ),
-                Positioned(
-                  bottom: -2,
-                  right: -2,
-                  child: Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: const Color(0xFF232428),
-                        width: 2.5,
-                      ),
+              ),
+              Positioned(
+                bottom: -2,
+                right: -2,
+                child: Builder(
+                  builder: (dotContext) => GestureDetector(
+                    onTap: () => _showStatusPicker(dotContext, user?.status),
+                    child: _buildStatusDot(
+                      statusColor,
+                      user?.status,
+                      isMobile: true,
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
           const SizedBox(width: 8),
           // Username + status
@@ -805,34 +796,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             ),
           ),
           const Divider(color: AppColors.divider, height: 1),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.only(top: 8, bottom: 16),
-              children: [
-                _buildCategoryHeader('TEXT CHANNELS'),
-                _buildChannelItem(
-                  name: 'general',
-                  isSelected: true,
-                  onTap: () =>
-                      ref.read(selectedChannelIdProvider.notifier).state =
-                          'general',
-                ),
-                _buildChannelItem(
-                  name: 'random',
-                  onTap: () =>
-                      ref.read(selectedChannelIdProvider.notifier).state =
-                          'random',
-                ),
-                const SizedBox(height: 16),
-                _buildCategoryHeader('VOICE CHANNELS'),
-                _buildChannelItem(
-                  name: 'General Voice',
-                  isVoice: true,
-                  onTap: () {},
-                ),
-              ],
-            ),
-          ),
+          Expanded(child: _buildChannelList(selectedServerId)),
           _buildDesktopUserPanel(context, ref),
         ],
       ),
@@ -861,37 +825,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
-            ),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                _buildUserAvatar(
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                ),
+                child: _buildUserAvatar(
                   displayName: displayName,
                   size: 32,
                   backgroundImage: avatarUrl,
                 ),
-                Positioned(
-                  bottom: -2,
-                  right: -2,
-                  child: Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: const Color(0xFF232428),
-                        width: 2,
-                      ),
-                    ),
+              ),
+              Positioned(
+                bottom: -2,
+                right: -2,
+                child: Builder(
+                  builder: (dotContext) => GestureDetector(
+                    onTap: () => _showStatusPicker(dotContext, user?.status),
+                    child: _buildStatusDot(statusColor, user?.status),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1019,13 +977,169 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   //  SHARED UI COMPONENTS
   // ═══════════════════════════════════════════════════════════════
 
-  Widget _buildCategoryHeader(String name) {
+  /// Xây dựng danh sách kênh real-time từ Firestore
+  /// [onChannelSelected] gọi sau khi chọn kênh — dùng để đóng drawer trên mobile
+  Widget _buildChannelList(
+    String? selectedServerId, {
+    VoidCallback? onChannelSelected,
+  }) {
+    if (selectedServerId == null) {
+      // Direct Messages mode — không hiển thị kênh server
+      return ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: [
+          _buildCategoryHeader('TIN NHẮN TRỰC TIẾP'),
+          _buildChannelItem(
+            name: 'Chưa có cuộc trò chuyện',
+            isMuted: true,
+            onTap: () {},
+          ),
+        ],
+      );
+    }
+
+    final channelsState = ref.watch(
+      serverChannelsStreamProvider(selectedServerId),
+    );
+    final selectedChannelId = ref.watch(selectedChannelIdProvider);
+
+    return channelsState.when(
+      data: (channels) {
+        if (channels.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.tag_outlined,
+                  size: 36,
+                  color: AppColors.channelDefault.withOpacity(0.5),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Chưa có kênh nào',
+                  style: AppTextStyles.textMutedSmall,
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Tách kênh text và voice
+        final textChannels = channels
+            .where((c) => c.type == ChannelType.text)
+            .toList();
+        final voiceChannels = channels
+            .where((c) => c.type == ChannelType.voice)
+            .toList();
+
+        return ListView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          children: [
+            // Kênh văn bản — luôn hiện header để tạo nhanh
+            _buildCategoryHeader(
+              'KÊNH VĂN BẢN',
+              onAdd: () => _showQuickCreateChannel(
+                serverId: selectedServerId,
+                type: ChannelType.text,
+              ),
+            ),
+            if (textChannels.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 40),
+                child: Text(
+                  'Chưa có kênh văn bản',
+                  style: AppTextStyles.textMutedSmall,
+                ),
+              )
+            else
+              ...textChannels.map(
+                (channel) => _buildChannelItem(
+                  name: channel.name,
+                  isVoice: false,
+                  isSelected: selectedChannelId == channel.channelId,
+                  onTap: () {
+                    ref.read(selectedChannelIdProvider.notifier).state =
+                        channel.channelId;
+                    onChannelSelected?.call();
+                  },
+                ),
+              ),
+            const SizedBox(height: 8),
+            // Kênh thoại — luôn hiện header để tạo nhanh
+            _buildCategoryHeader(
+              'KÊNH THOẠI',
+              onAdd: () => _showQuickCreateChannel(
+                serverId: selectedServerId,
+                type: ChannelType.voice,
+              ),
+            ),
+            if (voiceChannels.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 40),
+                child: Text(
+                  'Chưa có kênh thoại',
+                  style: AppTextStyles.textMutedSmall,
+                ),
+              )
+            else
+              ...voiceChannels.map(
+                (channel) => _buildChannelItem(
+                  name: channel.name,
+                  isVoice: true,
+                  isSelected: selectedChannelId == channel.channelId,
+                  onTap: () {
+                    ref.read(selectedChannelIdProvider.notifier).state =
+                        channel.channelId;
+                    onChannelSelected?.call();
+                  },
+                ),
+              ),
+          ],
+        );
+      },
+      loading: () => const Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            color: AppColors.brand,
+            strokeWidth: 2,
+          ),
+        ),
+      ),
+      error: (err, _) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: AppColors.red, size: 20),
+            const SizedBox(height: 4),
+            Text('Không thể tải kênh', style: AppTextStyles.textMutedSmall),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryHeader(String name, {VoidCallback? onAdd}) {
     return Padding(
       padding: const EdgeInsets.only(left: 16, right: 8, top: 16, bottom: 4),
       child: Row(
         children: [
           Expanded(child: Text(name, style: AppTextStyles.categoryHeader)),
-          const Icon(Icons.add, color: AppColors.channelDefault, size: 16),
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: InkWell(
+              onTap: onAdd,
+              customBorder: const CircleBorder(),
+              child: const Icon(
+                Icons.add,
+                color: AppColors.channelDefault,
+                size: 16,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1035,6 +1149,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     required String name,
     bool isSelected = false,
     bool isVoice = false,
+    bool isMuted = false,
     VoidCallback? onTap,
   }) {
     return Padding(
@@ -1110,7 +1225,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildMainContent(WidgetRef ref) {
-    final selectedChannel = ref.watch(selectedChannelIdProvider) ?? 'general';
+    final channelInfo = ref.watch(selectedChannelInfoProvider);
+
+    // Lấy tên kênh từ provider nếu có
+    String channelDisplayName = 'general';
+    ChannelType channelType = ChannelType.text;
+    String channelTopic = '';
+
+    if (channelInfo != null) {
+      channelDisplayName = channelInfo.name;
+      channelType = channelInfo.type;
+      channelTopic = channelInfo.topic;
+    }
+
     return Column(
       children: [
         Container(
@@ -1119,9 +1246,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              const Icon(Icons.tag, color: AppColors.channelDefault, size: 20),
+              Icon(
+                channelType == ChannelType.voice
+                    ? Icons.volume_up_outlined
+                    : Icons.tag,
+                color: AppColors.channelDefault,
+                size: 20,
+              ),
               const SizedBox(width: 8),
-              Text(selectedChannel, style: AppTextStyles.headerSecondary),
+              Text(channelDisplayName, style: AppTextStyles.headerSecondary),
               const Spacer(),
               LayoutBuilder(
                 builder: (context, constraints) {
@@ -1176,12 +1309,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Chào mừng đến với #$selectedChannel!',
+                  'Chào mừng đến với #$channelDisplayName!',
                   style: AppTextStyles.welcomeTitle,
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Đây là nơi bắt đầu của kênh.',
+                Text(
+                  channelTopic.isNotEmpty
+                      ? channelTopic
+                      : 'Đây là nơi bắt đầu của kênh.',
                   style: AppTextStyles.welcomeSubtitle,
                 ),
               ],
@@ -1200,6 +1335,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         return 'Chờ đợi';
       case UserStatus.dnd:
         return 'Không làm phiền';
+      case UserStatus.invisible:
+        return 'Vô hình';
       default:
         return 'Ngoại tuyến';
     }
@@ -1213,9 +1350,334 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         return AppColors.statusIdle;
       case UserStatus.dnd:
         return AppColors.statusDnd;
+      case UserStatus.invisible:
+        return AppColors.statusInvisible;
       default:
         return AppColors.statusOffline;
     }
+  }
+
+  /// Hiển thị dot trạng thái trên avatar (có hollow circle cho invisible)
+  Widget _buildStatusDot(
+    Color statusColor,
+    UserStatus? status, {
+    bool isMobile = false,
+  }) {
+    final isInvisible = status == UserStatus.invisible;
+
+    return Container(
+      width: 14,
+      height: 14,
+      decoration: BoxDecoration(
+        color: isInvisible ? const Color(0xFF232428) : statusColor,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: const Color(0xFF232428),
+          width: isMobile ? 2.5 : 2,
+        ),
+      ),
+      child: isInvisible
+          ? Padding(
+              padding: const EdgeInsets.all(2),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            )
+          : null,
+    );
+  }
+
+  /// Hiển thị popup chọn trạng thái (Discord-style) — xuất hiện gần status dot
+  void _showStatusPicker(BuildContext dotContext, UserStatus? currentStatus) {
+    // Lấy vị trí của status dot so với overlay
+    final RenderBox dotBox = dotContext.findRenderObject() as RenderBox;
+    final RenderBox overlayBox =
+        Overlay.of(dotContext).context.findRenderObject() as RenderBox;
+    final Offset dotPosition = dotBox.localToGlobal(
+      Offset.zero,
+      ancestor: overlayBox,
+    );
+    final Size dotSize = dotBox.size;
+
+    // 4 items × 40px height + padding ≈ 180px; dùng 180 làm ước lượng chiều cao popup
+    const double estimatedPopupHeight = 180;
+    const double popupWidth = 220;
+
+    // Popup hiện bên trên status dot, căn lề trái với dot
+    // Nếu không đủ chỗ phía trên thì hiện bên dưới dot
+    double popupTop = dotPosition.dy - estimatedPopupHeight - 4;
+    if (popupTop < 0) {
+      popupTop = dotPosition.dy + dotSize.height + 4;
+    }
+
+    final popupPosition = RelativeRect.fromSize(
+      Rect.fromLTWH(
+        dotPosition.dx - 4,
+        popupTop,
+        popupWidth,
+        estimatedPopupHeight,
+      ),
+      overlayBox.size,
+    );
+
+    showMenu<UserStatus>(
+      context: dotContext,
+      position: popupPosition,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      color: AppColors.bgFloating,
+      elevation: 8,
+      items: [
+        _buildStatusMenuItem(
+          status: UserStatus.online,
+          label: 'Trực tuyến',
+          color: AppColors.statusOnline,
+          currentStatus: currentStatus,
+        ),
+        _buildStatusMenuItem(
+          status: UserStatus.idle,
+          label: 'Chờ đợi',
+          color: AppColors.statusIdle,
+          currentStatus: currentStatus,
+        ),
+        _buildStatusMenuItem(
+          status: UserStatus.dnd,
+          label: 'Không làm phiền',
+          color: AppColors.statusDnd,
+          currentStatus: currentStatus,
+        ),
+        _buildStatusMenuItem(
+          status: UserStatus.invisible,
+          label: 'Vô hình',
+          color: AppColors.statusInvisible,
+          isHollow: true,
+          currentStatus: currentStatus,
+        ),
+      ],
+    ).then((selectedStatus) {
+      if (selectedStatus != null) {
+        ref
+            .read(profileNotifierProvider.notifier)
+            .updatePresenceStatus(selectedStatus);
+      }
+    });
+  }
+
+  /// Xây dựng mỗi item trong menu chọn trạng thái
+  PopupMenuItem<UserStatus> _buildStatusMenuItem({
+    required UserStatus status,
+    required String label,
+    required Color color,
+    required UserStatus? currentStatus,
+    bool isHollow = false,
+  }) {
+    final isSelected = currentStatus == status;
+
+    return PopupMenuItem<UserStatus>(
+      value: status,
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        children: [
+          // Status dot
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: isHollow ? AppColors.bgFloating : color,
+              shape: BoxShape.circle,
+              border: Border.all(color: color, width: isHollow ? 2 : 0),
+            ),
+            child: isHollow
+                ? Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 10),
+          // Label
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? AppColors.white : AppColors.textNormal,
+                fontSize: 14,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ),
+          // Check mark if selected
+          if (isSelected)
+            const Icon(
+              Icons.check_rounded,
+              color: AppColors.textNormal,
+              size: 18,
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Hiển thị dialog tạo kênh nhanh (Discord-style)
+  void _showQuickCreateChannel({
+    required String serverId,
+    required ChannelType type,
+  }) {
+    final nameController = TextEditingController();
+    final isText = type == ChannelType.text;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: AppColors.bgFloating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            actionsPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            title: Row(
+              children: [
+                Icon(
+                  isText ? Icons.tag : Icons.volume_up_outlined,
+                  color: AppColors.brand,
+                  size: 22,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  isText ? 'Tạo kênh văn bản' : 'Tạo kênh thoại',
+                  style: AppTextStyles.headerPrimary.copyWith(fontSize: 18),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Tên kênh',
+                  style: AppTextStyles.bodySecondary.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: nameController,
+                  autofocus: true,
+                  style: const TextStyle(
+                    color: AppColors.textNormal,
+                    fontSize: 14,
+                  ),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: AppColors.inputBackground,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: const BorderSide(
+                        color: AppColors.inputBorder,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: const BorderSide(
+                        color: AppColors.inputBorder,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: const BorderSide(color: AppColors.brand),
+                    ),
+                    prefixText: isText ? '# ' : '',
+                    prefixStyle: AppTextStyles.textMuted,
+                    hintText: isText ? 'kênh-mới' : 'kênh-thoại-mới',
+                    hintStyle: AppTextStyles.textMuted,
+                  ),
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isText
+                      ? 'Tên kênh chỉ được chứa chữ thường, số và dấu gạch ngang.'
+                      : 'Kênh thoại cho phép tham gia gọi âm thanh/video.',
+                  style: AppTextStyles.textMutedSmall,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Hủy',
+                  style: TextStyle(color: AppColors.interactiveNormal),
+                ),
+              ),
+              TextButton(
+                onPressed: nameController.text.trim().isEmpty
+                    ? null
+                    : () async {
+                        final name = nameController.text
+                            .trim()
+                            .toLowerCase()
+                            .replaceAll(' ', '-');
+                        Navigator.pop(context);
+                        await ref
+                            .read(channelManagementNotifierProvider.notifier)
+                            .createChannel(
+                              serverId: serverId,
+                              name: name,
+                              type: type,
+                            );
+                        if (mounted) {
+                          final error = ref
+                              .read(channelManagementNotifierProvider)
+                              .errorMessage;
+                          if (error != null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(error),
+                                backgroundColor: AppColors.red,
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  isText
+                                      ? 'Đã tạo kênh văn bản #$name'
+                                      : 'Đã tạo kênh thoại $name',
+                                ),
+                                backgroundColor: AppColors.green,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                child: Text(
+                  'Tạo',
+                  style: TextStyle(
+                    color: nameController.text.trim().isEmpty
+                        ? AppColors.textMuted
+                        : AppColors.brand,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 }
 
