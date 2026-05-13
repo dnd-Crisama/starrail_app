@@ -125,6 +125,15 @@ class AppTextStyles {
     height: 1.2,
   );
 
+  /// Channel name khi có tin nhắn chưa đọc — Discord-style bold white
+  static const TextStyle channelNameUnread = TextStyle(
+    fontFamily: _fontFamily,
+    fontSize: 15,
+    fontWeight: FontWeight.w700,
+    color: AppColors.white,
+    height: 1.2,
+  );
+
   // ── Category header ──────────────────────────────────────────
   static const TextStyle categoryHeader = TextStyle(
     fontFamily: _fontFamily,

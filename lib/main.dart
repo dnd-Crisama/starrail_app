@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'firebase_options.dart';
 import 'app.dart';
 import 'core/utils/logger.dart';
@@ -11,7 +12,11 @@ void main() async {
   // Bắt buộc trước bất kỳ async operation nào.
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── 2. Khởi tạo Firebase ────────────────────────────────────
+  // ── 2. Khởi tạo locale data cho DateFormat ──────────────────
+  // Hỗ trợ định dạng ngày tháng tiếng Việt (vi_VN).
+  await initializeDateFormatting('vi_VN', null);
+
+  // ── 3. Khởi tạo Firebase ────────────────────────────────────
   // firebase_options.dart được tạo bởi `flutterfire configure`.
   //  // Thay FirebaseOptions.currentPlatform bằng DefaultFirebaseOptions.currentPlatform
   // nếu dùng flutterfire_cli (file được generate tự động).
@@ -34,7 +39,7 @@ void main() async {
     // Nhưng trong dev, tiếp tục chạy để debug.
   }
 
-  // ── 3. Chạy app ─────────────────────────────────────────────
+  // ── 4. Chạy app ─────────────────────────────────────────────
   // ProviderScope bọc toàn app để Riverpod hoạt động.
   // observers: [] — có thể thêm Riverpod observer để log state changes khi debug.
   runApp(const ProviderScope(child: App()));
