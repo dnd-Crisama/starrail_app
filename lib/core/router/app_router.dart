@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:starrail_app/features/server/presentation/screens/create_server_screen.dart';
 import 'package:starrail_app/features/server/presentation/screens/join_server_screen.dart';
+import 'package:starrail_app/features/friend/presentation/screens/friends_screen.dart';
+import 'package:starrail_app/features/friend/presentation/screens/add_friend_screen.dart';
+import 'package:starrail_app/features/friend/presentation/screens/dm_chat_screen.dart';
+import 'package:starrail_app/features/friend/presentation/screens/dm_list_screen.dart';
 
 import '../constants/app_constants.dart';
 import '../router/auth_refresh_notifier.dart';
@@ -121,6 +125,26 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppConstants.channelManagementPath,
         builder: (_, __) => const ChannelManagementScreen(),
+      ),
+      // ── Part 14: Friend & DM routes ──────────────────────────────
+      GoRoute(
+        path: AppConstants.friendsPath,
+        builder: (_, __) => const FriendsScreen(),
+      ),
+      GoRoute(
+        path: AppConstants.addFriendPath,
+        builder: (_, __) => const AddFriendScreen(),
+      ),
+      GoRoute(
+        path: AppConstants.dmListPath,
+        builder: (_, __) => const DmListScreen(),
+      ),
+      GoRoute(
+        path: '${AppConstants.dmChatPath}/:chatId',
+        builder: (_, state) {
+          final chatId = state.pathParameters['chatId'] ?? '';
+          return DmChatScreen(chatId: chatId);
+        },
       ),
     ],
     errorBuilder: (context, state) {

@@ -35,10 +35,20 @@ class AppConstants {
   static const String serversCollection = 'servers';
   static const String rolesSubcollection = 'roles';
   static const String channelsSubcollection = 'channels';
+  static const String friendshipsCollection = 'friendships';
+  static const String userChatsCollection = 'userChats';
 
   static const String createServerPath = '/create-server';
   static const String joinServerPath = '/join-server';
   static const String roleManagementPath = '/role-management';
   static const String serverSettingsPath = '/server-settings';
   static const String channelManagementPath = '/channel-management';
+
+  // ── Part 14: Friend & DM paths ──────────────────────────────
+  static const String friendsPath = '/friends';
+  static const String addFriendPath = '/add-friend';
+  static const String dmListPath = '/dm-list';
+
+  /// DM chat path — chatId được append: '/dm-chat/:chatId'
+  static const String dmChatPath = '/dm-chat';
 }

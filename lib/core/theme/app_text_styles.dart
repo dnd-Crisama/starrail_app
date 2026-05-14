@@ -204,4 +204,11 @@ class AppTextStyles {
     color: AppColors.textMuted,
     height: 1.375,
   );
+
+  // ── Aliases (Part 14+) ────────────────────────────────────────
+  /// Alias cho bodySecondary — text thông thường màu textNormal.
+  static const TextStyle textNormal = bodySecondary;
+
+  /// Alias cho header4 — tên/label nhỏ nổi bật.
+  static const TextStyle labelPrimary = header4;
 }
