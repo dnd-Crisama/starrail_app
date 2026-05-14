@@ -74,6 +74,17 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
         throw const AuthException(message: 'Người dùng chưa xác thực');
       }
 
+      final normalizedName = name.trim();
+      if (normalizedName.isEmpty) {
+        throw const ServerException(message: 'Tên vai trò không được để trống');
+      }
+
+      await _ensureCanManageRole(
+        serverId: serverId,
+        actorUserId: currentUser.uid,
+        targetHierarchyLevel: hierarchyLevel,
+      );
+
       final roleRef = firestore
           .collection('servers')
           .doc(serverId)
@@ -83,7 +94,7 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
       final roleModel = RoleModel(
         roleId: roleRef.id,
         serverId: serverId,
-        name: name,
+        name: normalizedName,
         color: color,
         permissions: permissions,
         hierarchyLevel: hierarchyLevel,
@@ -117,6 +128,11 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
     int? hierarchyLevel,
   }) async {
     try {
+      final currentUser = auth.currentUser;
+      if (currentUser == null) {
+        throw const AuthException(message: 'Người dùng chưa xác thực');
+      }
+
       final roleRef = firestore
           .collection('servers')
           .doc(serverId)
@@ -130,16 +146,36 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
 
       final existing = RoleModel.fromFirestore(roleDoc.data()!, roleDoc.id);
 
+      await _ensureCanManageRole(
+        serverId: serverId,
+        actorUserId: currentUser.uid,
+        targetRole: existing,
+        targetHierarchyLevel: hierarchyLevel ?? existing.hierarchyLevel,
+      );
+
+      if (existing.isManagedBySystem) {
+        throw const ServerException(
+          message: 'Không thể chỉnh sửa vai trò hệ thống',
+        );
+      }
+
       if (existing.isDefault && name != null && name != existing.name) {
         throw const ServerException(
           message: 'Không thể đổi tên vai trò mặc định @everyone',
+        );
+      }
+      if (existing.isDefault &&
+          hierarchyLevel != null &&
+          hierarchyLevel != existing.hierarchyLevel) {
+        throw const ServerException(
+          message: 'Không thể đổi cấp bậc của @everyone',
         );
       }
 
       final updateData = <String, dynamic>{
         'updatedAt': FieldValue.serverTimestamp(),
       };
-      if (name != null) updateData['name'] = name;
+      if (name != null) updateData['name'] = name.trim();
       if (color != null) updateData['color'] = color;
       if (permissions != null) updateData['permissions'] = permissions;
       if (hierarchyLevel != null) updateData['hierarchyLevel'] = hierarchyLevel;
@@ -162,6 +198,11 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
     required String roleId,
   }) async {
     try {
+      final currentUser = auth.currentUser;
+      if (currentUser == null) {
+        throw const AuthException(message: 'Người dùng chưa xác thực');
+      }
+
       final roleRef = firestore
           .collection('servers')
           .doc(serverId)
@@ -173,11 +214,21 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
         throw const ServerException(message: 'Không tìm thấy vai trò');
       }
 
-      final roleData = roleDoc.data()!;
-      if (roleData['isDefault'] == true) {
+      final existing = RoleModel.fromFirestore(roleDoc.data()!, roleDoc.id);
+
+      await _ensureCanManageRole(
+        serverId: serverId,
+        actorUserId: currentUser.uid,
+        targetRole: existing,
+      );
+
+      if (existing.isDefault) {
         throw const ServerException(
           message: 'Không thể xóa vai trò mặc định @everyone',
         );
+      }
+      if (existing.isManagedBySystem) {
+        throw const ServerException(message: 'Không thể xóa vai trò hệ thống');
       }
 
       // Remove roleId from all members who have it
@@ -232,6 +283,32 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
     required String roleId,
   }) async {
     try {
+      final currentUser = auth.currentUser;
+      if (currentUser == null) {
+        throw const AuthException(message: 'Người dùng chưa xác thực');
+      }
+
+      final role = await getRole(serverId: serverId, roleId: roleId);
+      if (role == null) {
+        throw const ServerException(message: 'Không tìm thấy vai trò');
+      }
+      if (role.isDefault || role.isManagedBySystem) {
+        throw const ServerException(
+          message: 'Không thể gán thủ công vai trò mặc định hoặc hệ thống',
+        );
+      }
+
+      await _ensureCanManageRole(
+        serverId: serverId,
+        actorUserId: currentUser.uid,
+        targetRole: role,
+      );
+      await _ensureCanManageMember(
+        serverId: serverId,
+        actorUserId: currentUser.uid,
+        targetUserId: userId,
+      );
+
       final memberRef = firestore
           .collection('servers')
           .doc(serverId)
@@ -266,6 +343,32 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
     required String roleId,
   }) async {
     try {
+      final currentUser = auth.currentUser;
+      if (currentUser == null) {
+        throw const AuthException(message: 'Người dùng chưa xác thực');
+      }
+
+      final role = await getRole(serverId: serverId, roleId: roleId);
+      if (role == null) {
+        throw const ServerException(message: 'Không tìm thấy vai trò');
+      }
+      if (role.isDefault || role.isManagedBySystem) {
+        throw const ServerException(
+          message: 'Không thể gỡ thủ công vai trò mặc định hoặc hệ thống',
+        );
+      }
+
+      await _ensureCanManageRole(
+        serverId: serverId,
+        actorUserId: currentUser.uid,
+        targetRole: role,
+      );
+      await _ensureCanManageMember(
+        serverId: serverId,
+        actorUserId: currentUser.uid,
+        targetUserId: userId,
+      );
+
       final memberRef = firestore
           .collection('servers')
           .doc(serverId)
@@ -371,5 +474,108 @@ class RoleRemoteDatasourceImpl implements RoleRemoteDatasource {
     } catch (e) {
       return null;
     }
+  }
+
+  Future<void> _ensureCanManageRole({
+    required String serverId,
+    required String actorUserId,
+    RoleModel? targetRole,
+    int? targetHierarchyLevel,
+  }) async {
+    if (await _isServerOwner(serverId: serverId, userId: actorUserId)) {
+      return;
+    }
+
+    final actorRoles = await _getMemberRoles(
+      serverId: serverId,
+      userId: actorUserId,
+    );
+    final hasManageRoles = actorRoles.any(
+      (role) =>
+          role.permissions.contains('MANAGE_ROLES') ||
+          role.permissions.contains('MANAGE_SERVER'),
+    );
+    if (!hasManageRoles) {
+      throw const ServerException(
+        message: 'Bạn không có quyền quản lý vai trò',
+      );
+    }
+
+    final actorHighestLevel = _highestHierarchyLevel(actorRoles);
+    final targetLevel = targetHierarchyLevel ?? targetRole?.hierarchyLevel;
+    if (targetLevel != null && actorHighestLevel <= targetLevel) {
+      throw const ServerException(
+        message:
+            'Chỉ có thể quản lý vai trò có cấp độ thấp hơn vai trò cao nhất của bạn',
+      );
+    }
+  }
+
+  Future<void> _ensureCanManageMember({
+    required String serverId,
+    required String actorUserId,
+    required String targetUserId,
+  }) async {
+    if (actorUserId == targetUserId) return;
+    if (await _isServerOwner(serverId: serverId, userId: actorUserId)) return;
+
+    if (await _isServerOwner(serverId: serverId, userId: targetUserId)) {
+      throw const ServerException(
+        message: 'Không thể quản lý vai trò của chủ sở hữu server',
+      );
+    }
+
+    final actorRoles = await _getMemberRoles(
+      serverId: serverId,
+      userId: actorUserId,
+    );
+    final targetRoles = await _getMemberRoles(
+      serverId: serverId,
+      userId: targetUserId,
+    );
+    if (_highestHierarchyLevel(actorRoles) <=
+        _highestHierarchyLevel(targetRoles)) {
+      throw const ServerException(
+        message: 'Chỉ có thể quản lý thành viên có vai trò thấp hơn bạn',
+      );
+    }
+  }
+
+  Future<bool> _isServerOwner({
+    required String serverId,
+    required String userId,
+  }) async {
+    final ownerId = await getServerOwnerId(serverId: serverId);
+    return ownerId == userId;
+  }
+
+  Future<List<RoleModel>> _getMemberRoles({
+    required String serverId,
+    required String userId,
+  }) async {
+    final member = await getServerMember(serverId: serverId, userId: userId);
+    if (member == null) {
+      throw const ServerException(message: 'Không tìm thấy thành viên server');
+    }
+
+    final roleIds = <String>{...member.roleIds};
+    try {
+      final defaultRole = await getDefaultRole(serverId: serverId);
+      roleIds.add(defaultRole.roleId);
+    } catch (_) {}
+
+    final roles = <RoleModel>[];
+    for (final roleId in roleIds) {
+      final role = await getRole(serverId: serverId, roleId: roleId);
+      if (role != null) roles.add(role);
+    }
+    return roles;
+  }
+
+  int _highestHierarchyLevel(List<RoleModel> roles) {
+    if (roles.isEmpty) return 0;
+    return roles
+        .map((role) => role.hierarchyLevel)
+        .reduce((value, element) => value > element ? value : element);
   }
 }

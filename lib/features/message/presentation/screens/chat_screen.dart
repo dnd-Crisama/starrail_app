@@ -1227,7 +1227,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           getRepliedMessage: () => _getRepliedMessage(message),
           getUserDataCache: _userDataCache,
           onUserTap: () {
-            UserProfileModal.showFromUid(context, uid: message.senderId);
+            UserProfileModal.showFromUid(
+              context,
+              uid: message.senderId,
+              serverId: widget.serverId,
+            );
           },
           onNavigateToMessage: (messageId) {
             _scrollToMessage(messageId);

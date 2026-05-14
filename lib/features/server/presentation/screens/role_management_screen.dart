@@ -47,47 +47,64 @@ class _RoleManagementScreenState extends ConsumerState<RoleManagementScreen> {
       }
     });
 
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      appBar: AppBar(
-        backgroundColor: AppColors.bgTertiary,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back,
-            color: AppColors.interactiveNormal,
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: AppColors.bgPrimary,
+        appBar: AppBar(
+          backgroundColor: AppColors.bgTertiary,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(
+              Icons.arrow_back,
+              color: AppColors.interactiveNormal,
+            ),
+            onPressed: () => Navigator.pop(context),
           ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Quản lý vai trò',
-          style: AppTextStyles.headerPrimary,
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add, color: AppColors.green),
-            onPressed: () => _navigateToRoleEditor(
-              context,
-              serverId: serverId,
-              existingRoles: rolesState.maybeWhen(
-                data: (roles) => roles,
-                orElse: () => [],
+          title: const Text(
+            'Quản lý vai trò',
+            style: AppTextStyles.headerPrimary,
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add, color: AppColors.green),
+              onPressed: () => _navigateToRoleEditor(
+                context,
+                serverId: serverId,
+                existingRoles: rolesState.maybeWhen(
+                  data: (roles) => roles,
+                  orElse: () => [],
+                ),
               ),
             ),
+          ],
+          bottom: const TabBar(
+            indicatorColor: AppColors.brand,
+            labelColor: AppColors.white,
+            unselectedLabelColor: AppColors.textMuted,
+            tabs: [
+              Tab(text: 'Vai trò'),
+              Tab(text: 'Thành viên'),
+            ],
           ),
-        ],
-      ),
-      body: managementState.isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.brand),
-            )
-          : rolesState.when(
-              data: (roles) => _buildRoleList(roles, serverId),
-              loading: () => const Center(
+        ),
+        body: managementState.isLoading
+            ? const Center(
                 child: CircularProgressIndicator(color: AppColors.brand),
+              )
+            : rolesState.when(
+                data: (roles) => TabBarView(
+                  children: [
+                    _buildRoleList(roles, serverId),
+                    _buildMemberRoleList(roles, serverId),
+                  ],
+                ),
+                loading: () => const Center(
+                  child: CircularProgressIndicator(color: AppColors.brand),
+                ),
+                error: (err, _) => _buildStreamError(err, serverId),
               ),
-              error: (err, _) => _buildStreamError(err, serverId),
-            ),
+      ),
     );
   }
 
@@ -161,6 +178,150 @@ class _RoleManagementScreenState extends ConsumerState<RoleManagementScreen> {
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMemberRoleList(List<RoleEntity> roles, String serverId) {
+    final membersState = ref.watch(
+      serverMembersWithUsersStreamProvider(serverId),
+    );
+    final editableRoles = roles
+        .where((role) => !role.isDefault && !role.isManagedBySystem)
+        .toList();
+
+    return membersState.when(
+      data: (members) {
+        if (members.isEmpty) {
+          return const Center(
+            child: Text('Chưa có thành viên', style: AppTextStyles.textMuted),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: members.length,
+          itemBuilder: (context, index) {
+            final item = members[index];
+            final displayName =
+                item.member.nickname ??
+                item.user?.username ??
+                item.member.userId;
+            final avatarUrl = item.user?.avatarUrl ?? '';
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.bgSecondary,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: AppColors.brand,
+                        backgroundImage: avatarUrl.isNotEmpty
+                            ? NetworkImage(avatarUrl)
+                            : null,
+                        child: avatarUrl.isEmpty
+                            ? Text(
+                                displayName.isNotEmpty
+                                    ? displayName[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(color: AppColors.white),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              displayName,
+                              style: AppTextStyles.bodySecondary.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              '${item.member.roleIds.length} vai trò',
+                              style: AppTextStyles.textMutedSmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (editableRoles.isEmpty)
+                    const Text(
+                      'Chưa có vai trò có thể gán',
+                      style: AppTextStyles.textMutedSmall,
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: editableRoles.map((role) {
+                        final selected = item.member.roleIds.contains(
+                          role.roleId,
+                        );
+                        return FilterChip(
+                          selected: selected,
+                          label: Text(role.name),
+                          avatar: CircleAvatar(
+                            radius: 6,
+                            backgroundColor: Color(role.color),
+                          ),
+                          selectedColor: Color(role.color).withOpacity(0.22),
+                          backgroundColor: AppColors.bgModifierHover,
+                          checkmarkColor: AppColors.white,
+                          labelStyle: TextStyle(
+                            color: selected
+                                ? AppColors.white
+                                : AppColors.interactiveNormal,
+                          ),
+                          onSelected: (value) async {
+                            final notifier = ref.read(
+                              roleManagementNotifierProvider.notifier,
+                            );
+                            if (value) {
+                              await notifier.assignRoleToMember(
+                                serverId: serverId,
+                                userId: item.member.userId,
+                                roleId: role.roleId,
+                              );
+                            } else {
+                              await notifier.removeRoleFromMember(
+                                serverId: serverId,
+                                userId: item.member.userId,
+                                roleId: role.roleId,
+                              );
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+      loading: () => const Center(
+        child: CircularProgressIndicator(color: AppColors.brand),
+      ),
+      error: (err, _) => Center(
+        child: Text(
+          'Không thể tải thành viên: $err',
+          style: AppTextStyles.textMuted,
+          textAlign: TextAlign.center,
+        ),
+      ),
     );
   }
 

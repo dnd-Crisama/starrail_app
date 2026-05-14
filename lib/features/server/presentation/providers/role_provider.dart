@@ -6,6 +6,7 @@ import '../../../../core/usecases/usecase.dart';
 import '../../domain/entities/permission.dart';
 import '../../domain/entities/role_entity.dart';
 import '../../domain/repositories/role_repository.dart';
+import '../../domain/entities/server_member_entity.dart';
 import '../../domain/usecases/assign_role_to_member_usecase.dart';
 import '../../domain/usecases/check_permission_usecase.dart';
 import '../../domain/usecases/create_role_usecase.dart';
@@ -14,7 +15,10 @@ import '../../domain/usecases/get_server_roles_usecase.dart';
 import '../../domain/usecases/remove_role_from_member_usecase.dart';
 import '../../domain/usecases/update_role_usecase.dart';
 import '../../data/datasources/role_remote_datasource.dart';
+import '../../data/models/server_member_model.dart';
 import '../../data/repositories/role_repository_impl.dart';
+import '../../../auth/data/models/user_model.dart';
+import '../../../auth/domain/entities/user_entity.dart';
 
 // ── Dependency Injection ───────────────────────────────────────
 
@@ -74,6 +78,51 @@ final serverRolesStreamProvider =
         },
         ifRight: (stream) => stream,
       );
+    });
+
+class ServerMemberRoleView {
+  final ServerMemberEntity member;
+  final UserEntity? user;
+
+  const ServerMemberRoleView({required this.member, this.user});
+}
+
+final serverMembersWithUsersStreamProvider =
+    StreamProvider.family<List<ServerMemberRoleView>, String>((
+      ref,
+      serverId,
+    ) {
+      return FirebaseFirestore.instance
+          .collection('servers')
+          .doc(serverId)
+          .collection('members')
+          .orderBy('joinedAt')
+          .snapshots()
+          .asyncMap((snapshot) async {
+            final members = <ServerMemberRoleView>[];
+            for (final doc in snapshot.docs) {
+              final member = ServerMemberModel.fromFirestore(
+                doc.data(),
+                doc.id,
+                serverId,
+              ).toEntity();
+
+              UserEntity? user;
+              final userDoc = await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(member.userId)
+                  .get();
+              if (userDoc.exists) {
+                user = UserModel.fromFirestore(
+                  userDoc.data()!,
+                  userDoc.id,
+                ).toEntity();
+              }
+
+              members.add(ServerMemberRoleView(member: member, user: user));
+            }
+            return members;
+          });
     });
 
 // ── Permission check provider ──────────────────────────────────
