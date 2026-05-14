@@ -19,6 +19,10 @@ final selectedServerNameProvider = StateProvider<String>(
 /// Cờ điều khiển sidebar channel có bị collapse trên mobile không.
 final isChannelSidebarOpenProvider = StateProvider<bool>((ref) => true);
 
+/// ID của DM chat đang được chọn trong chế độ Direct Messages.
+/// Null nghĩa là chưa chọn cuộc trò chuyện nào.
+final selectedDmChatIdProvider = StateProvider<String?>((ref) => null);
+
 /// Provider lấy thông tin kênh đang chọn (tên, loại, chủ đề)
 final selectedChannelInfoProvider = Provider<ChannelEntity?>((ref) {
   final serverId = ref.watch(selectedServerIdProvider);

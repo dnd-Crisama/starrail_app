@@ -52,6 +52,9 @@ class AppColors {
   static const Color black = Color(0xFF000000);
   static const Color transparent = Color(0x00000000);
 
+  /// Alias: primary text color (white cho dark mode Discord).
+  static const Color textPrimary = white;
+
   // ── Overlay ──────────────────────────────────────────────────
   static const Color scrim = Color(0xB3000000); // 70% black
 
