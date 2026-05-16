@@ -10,6 +10,11 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../auth/data/datasources/cloudinary_storage_datasource.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../server/domain/entities/channel_entity.dart';
+import '../../../server/domain/entities/permission.dart';
+import '../../../server/presentation/providers/channel_provider.dart';
+import '../../../server/presentation/providers/role_provider.dart';
+import '../../../server/presentation/providers/server_provider.dart';
 import '../../domain/entities/message_entity.dart';
 import '../providers/message_provider.dart';
 import '../widgets/message_context_menu.dart';
@@ -19,6 +24,24 @@ import '../widgets/reaction_display.dart';
 import '../widgets/delete_confirm_dialog.dart';
 import '../widgets/attachment_display.dart';
 import '../widgets/user_profile_modal.dart';
+
+final _currentMemberRoleIdsProvider =
+    StreamProvider.family<List<String>, ({String serverId, String userId})>((
+      ref,
+      params,
+    ) {
+      if (params.userId.isEmpty) return Stream.value(const <String>[]);
+
+      return FirebaseFirestore.instance
+          .collection('servers')
+          .doc(params.serverId)
+          .collection('members')
+          .doc(params.userId)
+          .snapshots()
+          .map((doc) {
+            return List<String>.from(doc.data()?['roleIds'] as List? ?? []);
+          });
+    });
 
 /// Màn hình chat hiển thị danh sách tin nhắn và input gửi tin nhắn
 class ChatScreen extends ConsumerStatefulWidget {
@@ -664,6 +687,75 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return false;
   }
 
+  ChannelEntity? _findCurrentChannel(List<ChannelEntity> channels) {
+    for (final channel in channels) {
+      if (channel.channelId == widget.channelId) return channel;
+    }
+    return null;
+  }
+
+  bool _canSendMessages({
+    required AsyncValue<bool> serverCanSendMessagesAsync,
+    required AsyncValue<List<ChannelEntity>> channelsAsync,
+    required AsyncValue<List<String>> memberRoleIdsAsync,
+    required bool isServerOwner,
+  }) {
+    final hasServerSendPermission = serverCanSendMessagesAsync.maybeWhen(
+      data: (value) => value,
+      orElse: () => false,
+    );
+    if (!hasServerSendPermission) return false;
+
+    final allowedSendRoleIds = channelsAsync.maybeWhen(
+      data: (channels) {
+        final channel = _findCurrentChannel(channels);
+        return channel?.allowedSendRoleIds ?? const <String>[];
+      },
+      orElse: () => const <String>[],
+    );
+
+    if (allowedSendRoleIds.isEmpty || isServerOwner) return true;
+
+    final memberRoleIds = memberRoleIdsAsync.maybeWhen(
+      data: (roleIds) => roleIds,
+      orElse: () => const <String>[],
+    );
+    return memberRoleIds.any(allowedSendRoleIds.contains);
+  }
+
+  bool _isCheckingSendPermission({
+    required AsyncValue<bool> serverCanSendMessagesAsync,
+    required AsyncValue<List<ChannelEntity>> channelsAsync,
+    required AsyncValue<List<String>> memberRoleIdsAsync,
+  }) {
+    final isServerPermissionLoading = serverCanSendMessagesAsync.maybeWhen(
+      loading: () => true,
+      orElse: () => false,
+    );
+    final isChannelsLoading = channelsAsync.maybeWhen(
+      loading: () => true,
+      orElse: () => false,
+    );
+    if (isServerPermissionLoading || isChannelsLoading) {
+      return true;
+    }
+
+    final allowedSendRoleIds = channelsAsync.maybeWhen(
+      data: (channels) {
+        final channel = _findCurrentChannel(channels);
+        return channel?.allowedSendRoleIds ?? const <String>[];
+      },
+      orElse: () => const <String>[],
+    );
+
+    final isMemberRolesLoading = memberRoleIdsAsync.maybeWhen(
+      loading: () => true,
+      orElse: () => false,
+    );
+
+    return allowedSendRoleIds.isNotEmpty && isMemberRolesLoading;
+  }
+
   @override
   Widget build(BuildContext context) {
     final messagesAsync = ref.watch(
@@ -673,10 +765,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       )),
     );
     final messageState = ref.watch(messageNotifierProvider);
-    final currentUserId = ref.read(authNotifierProvider).user?.uid ?? '';
+    final currentUserId =
+        ref.watch(authNotifierProvider.select((state) => state.user?.uid)) ??
+        '';
     final replyingTo = ref.watch(replyingToProvider);
     final editingMessage = ref.watch(editingMessageProvider);
     final flashState = ref.watch(flashMessageProvider);
+    final serverCanSendMessagesAsync = currentUserId.isEmpty
+        ? const AsyncValue<bool>.data(false)
+        : ref.watch(
+            hasPermissionProvider((
+              serverId: widget.serverId,
+              userId: currentUserId,
+              permission: Permission.sendMessages,
+            )),
+          );
+    final channelsAsync = ref.watch(
+      serverChannelsStreamProvider(widget.serverId),
+    );
+    final memberRoleIdsAsync = ref.watch(
+      _currentMemberRoleIdsProvider((
+        serverId: widget.serverId,
+        userId: currentUserId,
+      )),
+    );
+    final isServerOwner = ref.watch(isServerOwnerProvider(widget.serverId));
+    final canSendMessages = _canSendMessages(
+      serverCanSendMessagesAsync: serverCanSendMessagesAsync,
+      channelsAsync: channelsAsync,
+      memberRoleIdsAsync: memberRoleIdsAsync,
+      isServerOwner: isServerOwner,
+    );
+    final isCheckingSendPermission = _isCheckingSendPermission(
+      serverCanSendMessagesAsync: serverCanSendMessagesAsync,
+      channelsAsync: channelsAsync,
+      memberRoleIdsAsync: memberRoleIdsAsync,
+    );
 
     // ESC key handler — scroll to bottom khi nhấn ESC
     // Shift+ESC — đánh dấu đã đọc ngay lập tức (Condition C)
@@ -702,7 +826,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           Column(
             children: [
               // Reply bar (hiển thị khi đang reply)
-              if (replyingTo != null)
+              if (canSendMessages && replyingTo != null)
                 ReplyBar(
                   currentUserId: currentUserId,
                   onNavigateToMessage: () {
@@ -784,7 +908,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
               ),
               // Input bar
-              _buildInputBar(messageState, editingMessage),
+              _buildComposerArea(
+                canSendMessages: canSendMessages,
+                isCheckingSendPermission: isCheckingSendPermission,
+                messageState: messageState,
+                editingMessage: editingMessage,
+              ),
             ],
           ),
 
@@ -808,6 +937,68 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   /// Flash message overlay — hiển thị thông báo tạm thời trên màn hình
+  Widget _buildComposerArea({
+    required bool canSendMessages,
+    required bool isCheckingSendPermission,
+    required MessageState messageState,
+    required MessageEntity? editingMessage,
+  }) {
+    if (isCheckingSendPermission) {
+      return _buildCheckingPermissionComposer();
+    }
+    if (!canSendMessages) {
+      return _buildNoPermissionComposer();
+    }
+    return _buildInputBar(messageState, editingMessage);
+  }
+
+  Widget _buildCheckingPermissionComposer() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      decoration: BoxDecoration(
+        color: AppColors.inputBackground,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              color: AppColors.interactiveNormal,
+              strokeWidth: 2,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'Dang kiem tra quyen nhan tin...',
+            style: AppTextStyles.bodySecondary.copyWith(
+              color: AppColors.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoPermissionComposer() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      decoration: BoxDecoration(
+        color: AppColors.inputBackground,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        'Bạn không có quyền nhắn tin vào kênh này',
+        style: AppTextStyles.bodySecondary.copyWith(color: AppColors.textMuted),
+      ),
+    );
+  }
+
   Widget _buildFlashMessage(FlashMessageState flashState) {
     final message = flashState.currentMessage!;
     final color = _flashMessageColor(message.type);

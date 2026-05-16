@@ -103,6 +103,8 @@ class ChannelManagementNotifier extends StateNotifier<ChannelManagementState> {
     String? categoryId,
     int? position,
     String? topic,
+    List<String>? allowedViewRoleIds,
+    List<String>? allowedSendRoleIds,
   }) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
 
@@ -114,6 +116,8 @@ class ChannelManagementNotifier extends StateNotifier<ChannelManagementState> {
         categoryId: categoryId,
         position: position,
         topic: topic,
+        allowedViewRoleIds: allowedViewRoleIds,
+        allowedSendRoleIds: allowedSendRoleIds,
       ),
     );
 
@@ -131,6 +135,8 @@ class ChannelManagementNotifier extends StateNotifier<ChannelManagementState> {
     ChannelType? type,
     String? topic,
     int? position,
+    List<String>? allowedViewRoleIds,
+    List<String>? allowedSendRoleIds,
   }) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
 
@@ -142,6 +148,8 @@ class ChannelManagementNotifier extends StateNotifier<ChannelManagementState> {
         type: type,
         topic: topic,
         position: position,
+        allowedViewRoleIds: allowedViewRoleIds,
+        allowedSendRoleIds: allowedSendRoleIds,
       ),
     );
 

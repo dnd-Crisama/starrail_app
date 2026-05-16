@@ -14,6 +14,7 @@ import '../../domain/usecases/leave_server_usecase.dart';
 import '../../data/datasources/server_remote_datasource.dart';
 import '../../data/repositories/server_repository_impl.dart';
 import '../../../auth/data/models/user_model.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
 // ── Dependency Injection ───────────────────────────────────────
 
@@ -25,10 +26,12 @@ final _serverRemoteDatasourceProvider = Provider<ServerRemoteDatasource>((ref) {
 });
 
 final _serverRepositoryProvider = Provider<ServerRepository>((ref) {
-  final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+  final currentUserId = ref.watch(
+    authNotifierProvider.select((state) => state.user?.uid),
+  );
   return ServerRepositoryImpl(
     serverRemoteDatasource: ref.watch(_serverRemoteDatasourceProvider),
-    currentUserId: currentUserId,
+    currentUserId: currentUserId ?? '',
   );
 });
 
@@ -57,6 +60,14 @@ final getUserServersUseCaseProvider = Provider<GetUserServersUseCase>((ref) {
 final userServersStreamProvider = StreamProvider<List<ServerEntity>>((
   ref,
 ) async* {
+  final currentUserId = ref.watch(
+    authNotifierProvider.select((state) => state.user?.uid),
+  );
+  if (currentUserId == null || currentUserId.isEmpty) {
+    yield const <ServerEntity>[];
+    return;
+  }
+
   final useCase = ref.watch(getUserServersUseCaseProvider);
   final result = await useCase(const NoParams());
 

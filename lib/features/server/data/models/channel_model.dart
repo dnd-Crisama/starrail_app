@@ -9,6 +9,8 @@ class ChannelModel {
   final String categoryId;
   final int position;
   final String topic;
+  final List<String> allowedViewRoleIds;
+  final List<String> allowedSendRoleIds;
   final bool isDefault;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -21,6 +23,8 @@ class ChannelModel {
     this.categoryId = '',
     this.position = 0,
     this.topic = '',
+    this.allowedViewRoleIds = const [],
+    this.allowedSendRoleIds = const [],
     this.isDefault = false,
     required this.createdAt,
     required this.updatedAt,
@@ -35,6 +39,12 @@ class ChannelModel {
       categoryId: map['categoryId'] as String? ?? '',
       position: map['position'] as int? ?? 0,
       topic: map['topic'] as String? ?? '',
+      allowedViewRoleIds: List<String>.from(
+        map['allowedViewRoleIds'] as List? ?? [],
+      ),
+      allowedSendRoleIds: List<String>.from(
+        map['allowedSendRoleIds'] as List? ?? [],
+      ),
       isDefault: map['isDefault'] as bool? ?? false,
       createdAt: _parseTimestamp(map['createdAt']),
       updatedAt: _parseTimestamp(map['updatedAt']),
@@ -49,6 +59,8 @@ class ChannelModel {
       'categoryId': categoryId,
       'position': position,
       'topic': topic,
+      'allowedViewRoleIds': allowedViewRoleIds,
+      'allowedSendRoleIds': allowedSendRoleIds,
       'isDefault': isDefault,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -81,6 +93,8 @@ class ChannelModel {
       categoryId: categoryId,
       position: position,
       topic: topic,
+      allowedViewRoleIds: allowedViewRoleIds,
+      allowedSendRoleIds: allowedSendRoleIds,
       isDefault: isDefault,
       createdAt: createdAt,
       updatedAt: updatedAt,
@@ -96,6 +110,8 @@ class ChannelModel {
       categoryId: entity.categoryId,
       position: entity.position,
       topic: entity.topic,
+      allowedViewRoleIds: entity.allowedViewRoleIds,
+      allowedSendRoleIds: entity.allowedSendRoleIds,
       isDefault: entity.isDefault,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,

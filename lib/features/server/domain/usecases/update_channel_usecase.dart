@@ -21,6 +21,8 @@ class UpdateChannelUseCase
         type: params.type,
         topic: params.topic,
         position: params.position,
+        allowedViewRoleIds: params.allowedViewRoleIds,
+        allowedSendRoleIds: params.allowedSendRoleIds,
       );
       return Either.right<Failure, ChannelEntity>(channel);
     } on Failure catch (failure) {
@@ -40,6 +42,8 @@ class UpdateChannelParams {
   final ChannelType? type;
   final String? topic;
   final int? position;
+  final List<String>? allowedViewRoleIds;
+  final List<String>? allowedSendRoleIds;
 
   const UpdateChannelParams({
     required this.serverId,
@@ -48,5 +52,7 @@ class UpdateChannelParams {
     this.type,
     this.topic,
     this.position,
+    this.allowedViewRoleIds,
+    this.allowedSendRoleIds,
   });
 }

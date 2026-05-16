@@ -21,6 +21,8 @@ class ChannelRepositoryImpl implements ChannelRepository {
     String? categoryId,
     int? position,
     String? topic,
+    List<String>? allowedViewRoleIds,
+    List<String>? allowedSendRoleIds,
   }) async {
     try {
       final channelModel = await channelRemoteDatasource.createChannel(
@@ -30,6 +32,8 @@ class ChannelRepositoryImpl implements ChannelRepository {
         categoryId: categoryId,
         position: position,
         topic: topic,
+        allowedViewRoleIds: allowedViewRoleIds,
+        allowedSendRoleIds: allowedSendRoleIds,
       );
       return channelModel.toEntity();
     } on ServerException catch (e) {
@@ -49,6 +53,8 @@ class ChannelRepositoryImpl implements ChannelRepository {
     ChannelType? type,
     String? topic,
     int? position,
+    List<String>? allowedViewRoleIds,
+    List<String>? allowedSendRoleIds,
   }) async {
     try {
       final channelModel = await channelRemoteDatasource.updateChannel(
@@ -58,6 +64,8 @@ class ChannelRepositoryImpl implements ChannelRepository {
         type: type,
         topic: topic,
         position: position,
+        allowedViewRoleIds: allowedViewRoleIds,
+        allowedSendRoleIds: allowedSendRoleIds,
       );
       return channelModel.toEntity();
     } on ServerException catch (e) {

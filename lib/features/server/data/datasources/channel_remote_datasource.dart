@@ -14,6 +14,8 @@ abstract class ChannelRemoteDatasource {
     String? categoryId,
     int? position,
     String? topic,
+    List<String>? allowedViewRoleIds,
+    List<String>? allowedSendRoleIds,
   });
 
   Future<ChannelModel> updateChannel({
@@ -23,6 +25,8 @@ abstract class ChannelRemoteDatasource {
     ChannelType? type,
     String? topic,
     int? position,
+    List<String>? allowedViewRoleIds,
+    List<String>? allowedSendRoleIds,
   });
 
   Future<void> deleteChannel({
@@ -54,6 +58,8 @@ class ChannelRemoteDatasourceImpl implements ChannelRemoteDatasource {
     String? categoryId,
     int? position,
     String? topic,
+    List<String>? allowedViewRoleIds,
+    List<String>? allowedSendRoleIds,
   }) async {
     try {
       final currentUser = auth.currentUser;
@@ -93,6 +99,8 @@ class ChannelRemoteDatasourceImpl implements ChannelRemoteDatasource {
         categoryId: categoryId ?? '',
         position: newPosition,
         topic: topic ?? '',
+        allowedViewRoleIds: allowedViewRoleIds ?? const [],
+        allowedSendRoleIds: allowedSendRoleIds ?? const [],
         isDefault: false,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -120,6 +128,8 @@ class ChannelRemoteDatasourceImpl implements ChannelRemoteDatasource {
     ChannelType? type,
     String? topic,
     int? position,
+    List<String>? allowedViewRoleIds,
+    List<String>? allowedSendRoleIds,
   }) async {
     try {
       final channelRef = firestore
@@ -143,6 +153,12 @@ class ChannelRemoteDatasourceImpl implements ChannelRemoteDatasource {
       }
       if (topic != null) updateData['topic'] = topic;
       if (position != null) updateData['position'] = position;
+      if (allowedViewRoleIds != null) {
+        updateData['allowedViewRoleIds'] = allowedViewRoleIds;
+      }
+      if (allowedSendRoleIds != null) {
+        updateData['allowedSendRoleIds'] = allowedSendRoleIds;
+      }
 
       await channelRef.update(updateData);
 

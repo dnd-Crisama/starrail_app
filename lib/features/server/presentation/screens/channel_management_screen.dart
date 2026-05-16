@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../domain/entities/channel_entity.dart';
 import '../providers/channel_provider.dart';
+import '../providers/role_provider.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 
 class ChannelManagementScreen extends ConsumerStatefulWidget {
@@ -420,6 +421,8 @@ class _ChannelEditorScreenState extends ConsumerState<ChannelEditorScreen> {
   late TextEditingController _nameController;
   late TextEditingController _topicController;
   ChannelType _selectedType = ChannelType.text;
+  final Set<String> _allowedViewRoleIds = {};
+  final Set<String> _allowedSendRoleIds = {};
   bool _isSaving = false;
 
   @override
@@ -432,6 +435,8 @@ class _ChannelEditorScreenState extends ConsumerState<ChannelEditorScreen> {
       text: widget.editingChannel?.topic ?? '',
     );
     _selectedType = widget.editingChannel?.type ?? ChannelType.text;
+    _allowedViewRoleIds.addAll(widget.editingChannel?.allowedViewRoleIds ?? []);
+    _allowedSendRoleIds.addAll(widget.editingChannel?.allowedSendRoleIds ?? []);
   }
 
   @override
@@ -445,6 +450,7 @@ class _ChannelEditorScreenState extends ConsumerState<ChannelEditorScreen> {
   Widget build(BuildContext context) {
     final isEditing = widget.editingChannel != null;
     final isDefaultChannel = widget.editingChannel?.isDefault ?? false;
+    final rolesState = ref.watch(serverRolesStreamProvider(widget.serverId));
 
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
@@ -674,6 +680,26 @@ class _ChannelEditorScreenState extends ConsumerState<ChannelEditorScreen> {
               const SizedBox(height: 20),
             ],
 
+            Text('Quyền truy cập kênh', style: AppTextStyles.bodySecondary),
+            const SizedBox(height: 4),
+            Text(
+              'Để trống để mọi thành viên trong server có thể xem kênh.',
+              style: AppTextStyles.textMutedSmall,
+            ),
+            const SizedBox(height: 8),
+            rolesState.when(
+              data: (roles) => _buildRolePermissionSection(roles),
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: LinearProgressIndicator(color: AppColors.brand),
+              ),
+              error: (_, __) => const Text(
+                'Không thể tải danh sách vai trò',
+                style: AppTextStyles.textMutedSmall,
+              ),
+            ),
+            const SizedBox(height: 20),
+
             // ── Cancel button ────────────────────────────────────
             SizedBox(
               width: double.infinity,
@@ -694,6 +720,99 @@ class _ChannelEditorScreenState extends ConsumerState<ChannelEditorScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildRolePermissionSection(List roles) {
+    final editableRoles = roles.where((role) => !role.isDefault).toList();
+    if (editableRoles.isEmpty) {
+      return const Text(
+        'Chưa có vai trò riêng để cấu hình.',
+        style: AppTextStyles.textMutedSmall,
+      );
+    }
+
+    return Column(
+      children: editableRoles.map<Widget>((role) {
+        final canView = _allowedViewRoleIds.contains(role.roleId);
+        final canSend = _allowedSendRoleIds.contains(role.roleId);
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.bgSecondary,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Color(role.color),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      role.name,
+                      style: AppTextStyles.bodySecondary.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                value: canView,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                activeColor: AppColors.brand,
+                title: const Text(
+                  'Được xem kênh',
+                  style: AppTextStyles.bodySmall,
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    if (value) {
+                      _allowedViewRoleIds.add(role.roleId);
+                    } else {
+                      _allowedViewRoleIds.remove(role.roleId);
+                      _allowedSendRoleIds.remove(role.roleId);
+                    }
+                  });
+                },
+              ),
+              SwitchListTile(
+                value: canSend,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                activeColor: AppColors.brand,
+                title: Text(
+                  _selectedType == ChannelType.text
+                      ? 'Được chat trong kênh'
+                      : 'Được nói trong kênh',
+                  style: AppTextStyles.bodySmall,
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    if (value) {
+                      _allowedViewRoleIds.add(role.roleId);
+                      _allowedSendRoleIds.add(role.roleId);
+                    } else {
+                      _allowedSendRoleIds.remove(role.roleId);
+                    }
+                  });
+                },
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -722,6 +841,8 @@ class _ChannelEditorScreenState extends ConsumerState<ChannelEditorScreen> {
             name: name.isEmpty ? widget.editingChannel!.name : name,
             type: _selectedType,
             topic: _topicController.text.trim(),
+            allowedViewRoleIds: _allowedViewRoleIds.toList(),
+            allowedSendRoleIds: _allowedSendRoleIds.toList(),
           );
     } else {
       await ref
@@ -731,6 +852,8 @@ class _ChannelEditorScreenState extends ConsumerState<ChannelEditorScreen> {
             name: name,
             type: _selectedType,
             topic: _topicController.text.trim(),
+            allowedViewRoleIds: _allowedViewRoleIds.toList(),
+            allowedSendRoleIds: _allowedSendRoleIds.toList(),
           );
     }
 

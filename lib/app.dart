@@ -3,7 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/domain/entities/user_entity.dart';
+import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/auth/presentation/providers/profile_provider.dart';
+import 'features/home/presentation/providers/home_provider.dart';
+import 'features/message/presentation/providers/message_provider.dart';
+import 'features/server/presentation/providers/server_provider.dart';
 
 /// Thêm WidgetsBindingObserver để lắng nghe App chuyển nền/thoát
 class _AppLifecycleObserver extends WidgetsBindingObserver {
@@ -66,6 +70,22 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(
+      authNotifierProvider.select((state) => state.user?.uid),
+      (previousUserId, nextUserId) {
+        if (previousUserId == nextUserId) return;
+
+        ref.read(selectedServerIdProvider.notifier).state = null;
+        ref.read(selectedChannelIdProvider.notifier).state = null;
+        ref.read(selectedServerNameProvider.notifier).state = 'Direct Messages';
+        ref.read(selectedDmChatIdProvider.notifier).state = null;
+        ref.read(isChannelSidebarOpenProvider.notifier).state = true;
+
+        ref.invalidate(userServersStreamProvider);
+        ref.invalidate(unreadStatusNotifierProvider);
+      },
+    );
+
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
       routerConfig: router,

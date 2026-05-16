@@ -68,9 +68,10 @@ class AuthState {
     bool? isLoading,
     String? errorMessage,
     bool? needsProfileCreation,
+    bool clearUser = false,
   }) {
     return AuthState(
-      user: user ?? this.user,
+      user: clearUser ? null : user ?? this.user,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
       needsProfileCreation: needsProfileCreation ?? this.needsProfileCreation,
@@ -105,18 +106,31 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> appStarted() async {
     try {
       final userEntity = await _authRepository.getCurrentUser();
-      state = state.copyWith(user: userEntity, isLoading: false);
+      state = state.copyWith(
+        user: userEntity,
+        isLoading: false,
+        needsProfileCreation: false,
+      );
     } catch (e) {
       if (e is CacheFailure) {
-        state = state.copyWith(isLoading: false, needsProfileCreation: true);
+        state = state.copyWith(
+          isLoading: false,
+          needsProfileCreation: true,
+          clearUser: true,
+        );
       } else {
-        state = state.copyWith(isLoading: false);
+        state = state.copyWith(isLoading: false, clearUser: true);
       }
     }
   }
 
   Future<void> login({required String email, required String password}) async {
-    state = state.copyWith(isLoading: true, errorMessage: null);
+    state = state.copyWith(
+      isLoading: true,
+      errorMessage: null,
+      needsProfileCreation: false,
+      clearUser: true,
+    );
 
     final result = await _loginUseCase(
       LoginParams(email: email, password: password),
@@ -125,14 +139,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = result.fold(
       ifLeft: (failure) {
         if (failure is CacheFailure) {
-          return state.copyWith(isLoading: false, needsProfileCreation: true);
+          return state.copyWith(
+            isLoading: false,
+            needsProfileCreation: true,
+            clearUser: true,
+          );
         }
         return state.copyWith(
           isLoading: false,
           errorMessage: _mapFailureToMessage(failure),
+          clearUser: true,
         );
       },
-      ifRight: (user) => state.copyWith(isLoading: false, user: user),
+      ifRight: (user) => state.copyWith(
+        isLoading: false,
+        user: user,
+        needsProfileCreation: false,
+      ),
     );
   }
 
@@ -141,7 +164,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String password,
     required String username,
   }) async {
-    state = state.copyWith(isLoading: true, errorMessage: null);
+    state = state.copyWith(
+      isLoading: true,
+      errorMessage: null,
+      needsProfileCreation: false,
+      clearUser: true,
+    );
 
     final result = await _registerUseCase(
       RegisterParams(email: email, password: password, username: username),
@@ -152,7 +180,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         isLoading: false,
         errorMessage: _mapFailureToMessage(failure),
       ),
-      ifRight: (user) => state.copyWith(isLoading: false, user: user),
+      ifRight: (user) => state.copyWith(
+        isLoading: false,
+        user: user,
+        needsProfileCreation: false,
+      ),
     );
   }
 

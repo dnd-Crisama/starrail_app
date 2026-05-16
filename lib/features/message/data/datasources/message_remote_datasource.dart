@@ -29,6 +29,12 @@ class MessageRemoteDatasource {
     String? replyToMessageId,
     List<Map<String, dynamic>> attachments = const [],
   }) async {
+    await _ensureCanSendMessage(
+      serverId: serverId,
+      channelId: channelId,
+      senderId: senderId,
+    );
+
     final docRef = _messagesRef(serverId, channelId).doc();
     final now = Timestamp.now();
 
@@ -60,6 +66,44 @@ class MessageRemoteDatasource {
 
     await batch.commit();
     return messageModel.toEntity();
+  }
+
+  Future<void> _ensureCanSendMessage({
+    required String serverId,
+    required String channelId,
+    required String senderId,
+  }) async {
+    final channelDoc = await firestore
+        .collection('servers')
+        .doc(serverId)
+        .collection('channels')
+        .doc(channelId)
+        .get();
+    final channelData = channelDoc.data();
+    if (channelData == null) return;
+
+    final allowedSendRoleIds = List<String>.from(
+      channelData['allowedSendRoleIds'] as List? ?? [],
+    );
+    if (allowedSendRoleIds.isEmpty) return;
+
+    final serverDoc = await firestore.collection('servers').doc(serverId).get();
+    if (serverDoc.data()?['ownerId'] == senderId) return;
+
+    final memberDoc = await firestore
+        .collection('servers')
+        .doc(serverId)
+        .collection('members')
+        .doc(senderId)
+        .get();
+    final memberRoleIds = List<String>.from(
+      memberDoc.data()?['roleIds'] as List? ?? [],
+    );
+
+    final canSend = memberRoleIds.any(allowedSendRoleIds.contains);
+    if (!canSend) {
+      throw Exception('Bạn không có quyền chat trong kênh này');
+    }
   }
 
   /// Stream tin nhắn real-time, sắp xếp theo createdAt tăng dần (cũ → mới)

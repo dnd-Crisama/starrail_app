@@ -9,6 +9,8 @@ abstract class ChannelRepository {
     String? categoryId,
     int? position,
     String? topic,
+    List<String>? allowedViewRoleIds,
+    List<String>? allowedSendRoleIds,
   });
 
   /// Cập nhật kênh
@@ -19,6 +21,8 @@ abstract class ChannelRepository {
     ChannelType? type,
     String? topic,
     int? position,
+    List<String>? allowedViewRoleIds,
+    List<String>? allowedSendRoleIds,
   });
 
   /// Xóa kênh

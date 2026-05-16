@@ -10,6 +10,8 @@ class ChannelEntity extends Equatable {
   final String categoryId;
   final int position;
   final String topic;
+  final List<String> allowedViewRoleIds;
+  final List<String> allowedSendRoleIds;
   final bool isDefault;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -22,6 +24,8 @@ class ChannelEntity extends Equatable {
     this.categoryId = '',
     this.position = 0,
     this.topic = '',
+    this.allowedViewRoleIds = const [],
+    this.allowedSendRoleIds = const [],
     this.isDefault = false,
     required this.createdAt,
     required this.updatedAt,
@@ -35,6 +39,8 @@ class ChannelEntity extends Equatable {
     String? categoryId,
     int? position,
     String? topic,
+    List<String>? allowedViewRoleIds,
+    List<String>? allowedSendRoleIds,
     bool? isDefault,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -47,6 +53,8 @@ class ChannelEntity extends Equatable {
       categoryId: categoryId ?? this.categoryId,
       position: position ?? this.position,
       topic: topic ?? this.topic,
+      allowedViewRoleIds: allowedViewRoleIds ?? this.allowedViewRoleIds,
+      allowedSendRoleIds: allowedSendRoleIds ?? this.allowedSendRoleIds,
       isDefault: isDefault ?? this.isDefault,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -54,5 +62,18 @@ class ChannelEntity extends Equatable {
   }
 
   @override
-  List<Object?> get props => [channelId, serverId, name, type, position];
+  List<Object?> get props => [
+    channelId,
+    serverId,
+    name,
+    type,
+    categoryId,
+    position,
+    topic,
+    allowedViewRoleIds,
+    allowedSendRoleIds,
+    isDefault,
+    createdAt,
+    updatedAt,
+  ];
 }

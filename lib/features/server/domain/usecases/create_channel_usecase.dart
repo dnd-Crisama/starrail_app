@@ -21,6 +21,8 @@ class CreateChannelUseCase
         categoryId: params.categoryId,
         position: params.position,
         topic: params.topic,
+        allowedViewRoleIds: params.allowedViewRoleIds,
+        allowedSendRoleIds: params.allowedSendRoleIds,
       );
       return Either.right<Failure, ChannelEntity>(channel);
     } on Failure catch (failure) {
@@ -40,6 +42,8 @@ class CreateChannelParams {
   final String? categoryId;
   final int? position;
   final String? topic;
+  final List<String>? allowedViewRoleIds;
+  final List<String>? allowedSendRoleIds;
 
   const CreateChannelParams({
     required this.serverId,
@@ -48,5 +52,7 @@ class CreateChannelParams {
     this.categoryId,
     this.position,
     this.topic,
+    this.allowedViewRoleIds,
+    this.allowedSendRoleIds,
   });
 }
