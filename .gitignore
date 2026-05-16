@@ -2,6 +2,13 @@
 .env.local
 .env.*.local
 
+.flutter-plugins-dependencies
+
+linux/
+macos/
+windows/
+web/
+
 # Miscellaneous
 *.class
 *.log
