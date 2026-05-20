@@ -46,6 +46,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '352924430721',
     projectId: 'starrail-app',
     authDomain: 'starrail-app.firebaseapp.com',
+    databaseURL:
+        'https://starrail-app-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'starrail-app.firebasestorage.app',
     measurementId: 'G-NG62C56KQ9',
   );
@@ -55,6 +57,8 @@ class DefaultFirebaseOptions {
     appId: '1:352924430721:android:55a1ace6b632472ccb7880',
     messagingSenderId: '352924430721',
     projectId: 'starrail-app',
+    databaseURL:
+        'https://starrail-app-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'starrail-app.firebasestorage.app',
   );
 
@@ -63,6 +67,8 @@ class DefaultFirebaseOptions {
     appId: '1:352924430721:ios:7103252f5a87fab1cb7880',
     messagingSenderId: '352924430721',
     projectId: 'starrail-app',
+    databaseURL:
+        'https://starrail-app-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'starrail-app.firebasestorage.app',
     iosBundleId: 'com.example.starrailApp',
   );
@@ -72,6 +78,8 @@ class DefaultFirebaseOptions {
     appId: '1:352924430721:ios:7103252f5a87fab1cb7880',
     messagingSenderId: '352924430721',
     projectId: 'starrail-app',
+    databaseURL:
+        'https://starrail-app-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'starrail-app.firebasestorage.app',
     iosBundleId: 'com.example.starrailApp',
   );
@@ -82,6 +90,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '352924430721',
     projectId: 'starrail-app',
     authDomain: 'starrail-app.firebaseapp.com',
+    databaseURL:
+        'https://starrail-app-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'starrail-app.firebasestorage.app',
     measurementId: 'G-NYBPG5HTFM',
   );

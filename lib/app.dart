@@ -19,11 +19,12 @@ class _AppLifecycleObserver extends WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
 
     // Chỉ cập nhật status nếu user đã đăng nhập
-    final user = ref.read(profileNotifierProvider).user;
+    final user = ref.read(authNotifierProvider).user;
     if (user == null) return;
 
     // Không ghi đè trạng thái nếu người dùng đã chọn Vô hình hoặc Không làm phiền
-    if (user.status == UserStatus.invisible || user.status == UserStatus.dnd) {
+    if (user.status == UserStatus.invisible ||
+        user.status == UserStatus.dnd) {
       return;
     }
 
@@ -35,13 +36,11 @@ class _AppLifecycleObserver extends WidgetsBindingObserver {
             .updatePresenceStatus(UserStatus.online);
         break;
       case AppLifecycleState.inactive:
+        break;
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
         // App xuống nền/tắt -> Idle
-        ref
-            .read(profileNotifierProvider.notifier)
-            .updatePresenceStatus(UserStatus.idle);
         break;
     }
   }
@@ -55,16 +54,19 @@ class App extends ConsumerStatefulWidget {
 }
 
 class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
+  late final _AppLifecycleObserver _lifecycleObserver;
+
   @override
   void initState() {
     super.initState();
     // Đăng ký observer
-    WidgetsBinding.instance.addObserver(_AppLifecycleObserver(ref));
+    _lifecycleObserver = _AppLifecycleObserver(ref);
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(_AppLifecycleObserver(ref));
+    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
     super.dispose();
   }
 
@@ -81,6 +83,7 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
         ref.read(selectedDmChatIdProvider.notifier).state = null;
         ref.read(isChannelSidebarOpenProvider.notifier).state = true;
 
+        ref.invalidate(profileNotifierProvider);
         ref.invalidate(userServersStreamProvider);
         ref.invalidate(unreadStatusNotifierProvider);
       },

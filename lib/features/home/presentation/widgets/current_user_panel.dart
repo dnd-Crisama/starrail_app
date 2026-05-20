@@ -29,10 +29,7 @@ class CurrentUserPanel extends ConsumerWidget {
 
     return Container(
       height: isMobile ? null : 52,
-      padding: EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: isMobile ? 6 : 0,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: isMobile ? 6 : 0),
       decoration: const BoxDecoration(
         color: Color(0xFF232428),
         borderRadius: BorderRadius.only(
@@ -58,11 +55,8 @@ class CurrentUserPanel extends ConsumerWidget {
                 right: -2,
                 child: Builder(
                   builder: (dotContext) => GestureDetector(
-                    onTap: () => _showStatusPicker(
-                      dotContext,
-                      ref,
-                      user?.status,
-                    ),
+                    onTap: () =>
+                        _showStatusPicker(dotContext, ref, user?.status),
                     child: _StatusDot(
                       color: statusColor,
                       status: user?.status,
@@ -122,12 +116,14 @@ class CurrentUserPanel extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               color: AppColors.bgFloating,
-              onSelected: (value) {
+              onSelected: (value) async {
                 onBeforeNavigate?.call();
                 if (value == 'logout') {
-                  ref.read(authNotifierProvider.notifier).logout();
-                }
-                if (value == 'profile') {
+                  // Cập nhật status thành OFFLINE trước khi logout
+                  // Chờ 500ms để đảm bảo status được lưu trước logout
+                  await ref.read(authNotifierProvider.notifier).logout();
+                  return;
+                } else if (value == 'profile') {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const ProfileScreen()),
@@ -233,7 +229,12 @@ class CurrentUserPanel extends ConsumerWidget {
     }
 
     final popupPosition = RelativeRect.fromSize(
-      Rect.fromLTWH(dotPosition.dx - 4, popupTop, popupWidth, estimatedPopupHeight),
+      Rect.fromLTWH(
+        dotPosition.dx - 4,
+        popupTop,
+        popupWidth,
+        estimatedPopupHeight,
+      ),
       overlayBox.size,
     );
 
@@ -341,10 +342,7 @@ class _PanelIconButton extends StatelessWidget {
   final IconData icon;
   final double size;
 
-  const _PanelIconButton({
-    required this.icon,
-    required this.size,
-  });
+  const _PanelIconButton({required this.icon, required this.size});
 
   @override
   Widget build(BuildContext context) {

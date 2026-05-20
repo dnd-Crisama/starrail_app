@@ -4,15 +4,18 @@ import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/user_repository.dart';
 import '../datasources/user_remote_datasource.dart';
 import '../datasources/storage_remote_datasource.dart';
+import '../datasources/presence_remote_datasource.dart';
 
 class UserRepositoryImpl implements UserRepository {
   final UserRemoteDatasource userRemoteDatasource;
   final StorageRemoteDatasource storageRemoteDatasource;
+  final PresenceRemoteDatasource presenceRemoteDatasource;
   final String currentUserId;
 
   UserRepositoryImpl({
     required this.userRemoteDatasource,
     required this.storageRemoteDatasource,
+    required this.presenceRemoteDatasource,
     required this.currentUserId,
   });
 
@@ -67,7 +70,12 @@ class UserRepositoryImpl implements UserRepository {
   @override
   Future<void> updateStatus(UserStatus status) async {
     try {
+      // Cập nhật cả Firestore và Realtime Database
       await userRemoteDatasource.updateStatus(
+        currentUserId,
+        status.name.toUpperCase(),
+      );
+      await presenceRemoteDatasource.updatePresenceStatus(
         currentUserId,
         status.name.toUpperCase(),
       );

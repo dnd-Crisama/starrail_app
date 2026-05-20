@@ -11,6 +11,7 @@ import '../../domain/usecases/delete_server_usecase.dart';
 import '../../domain/usecases/get_user_servers_usecase.dart';
 import '../../domain/usecases/join_server_usecase.dart';
 import '../../domain/usecases/leave_server_usecase.dart';
+import '../../domain/usecases/get_server_members_usecase.dart';
 import '../../data/datasources/server_remote_datasource.dart';
 import '../../data/repositories/server_repository_impl.dart';
 import '../../../auth/data/models/user_model.dart';
@@ -53,6 +54,10 @@ final deleteServerUseCaseProvider = Provider<DeleteServerUseCase>((ref) {
 
 final getUserServersUseCaseProvider = Provider<GetUserServersUseCase>((ref) {
   return GetUserServersUseCase(ref.watch(_serverRepositoryProvider));
+});
+
+final getServerMembersUseCaseProvider = Provider<GetServerMembersUseCase>((ref) {
+  return GetServerMembersUseCase(ref.watch(_serverRepositoryProvider));
 });
 
 // ── Stream Provider cho danh sách servers real-time ───────────

@@ -34,4 +34,9 @@ abstract class ServerRepository {
     required String serverId,
     required String userId,
   });
+
+  /// Lắng nghe danh sách thành viên của server.
+  Stream<List<ServerMemberEntity>> watchServerMembers({
+    required String serverId,
+  });
 }
