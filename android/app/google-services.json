@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "352924430721",
+    "firebase_url": "https://starrail-app-default-rtdb.asia-southeast1.firebasedatabase.app",
     "project_id": "starrail-app",
     "storage_bucket": "starrail-app.firebasestorage.app"
   },
