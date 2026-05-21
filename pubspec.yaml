@@ -19,6 +19,7 @@ dependencies:
   
   # Image Picker (Để chọn avatar từ gallery/camera)
   image_picker: ^1.0.7
+  image_cropper: ^12.2.1
 
   # Routing
   go_router: ^14.2.0
