@@ -43,6 +43,7 @@ class AppConstants {
   static const String roleManagementPath = '/role-management';
   static const String serverSettingsPath = '/server-settings';
   static const String channelManagementPath = '/channel-management';
+  static const String adminConsolePath = '/admin';
 
   // ── Part 14: Friend & DM paths ──────────────────────────────
   static const String friendsPath = '/friends';

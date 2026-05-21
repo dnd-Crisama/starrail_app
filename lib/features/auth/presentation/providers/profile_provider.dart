@@ -1,7 +1,6 @@
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_database/firebase_database.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/user_repository.dart';
 import '../../domain/usecases/update_profile_usecase.dart';
@@ -18,7 +17,7 @@ final _storageDatasourceProvider = Provider<StorageRemoteDatasource>((ref) {
 });
 
 final _presenceDatasourceProvider = Provider<PresenceRemoteDatasource>((ref) {
-  return PresenceRemoteDatasourceImpl(database: FirebaseDatabase.instance);
+  return PresenceRemoteDatasourceImpl(database: ref.watch(firebaseDatabaseProvider));
 });
 
 final _userRepoProvider = Provider<UserRepository>((ref) {

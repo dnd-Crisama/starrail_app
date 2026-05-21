@@ -7,6 +7,7 @@ class ServerEntity extends Equatable {
   final String iconUrl;
   final String ownerId;
   final String inviteCode;
+  final bool isSuspended;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -16,6 +17,7 @@ class ServerEntity extends Equatable {
     this.iconUrl = '',
     required this.ownerId,
     required this.inviteCode,
+    this.isSuspended = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -26,6 +28,7 @@ class ServerEntity extends Equatable {
     String? iconUrl,
     String? ownerId,
     String? inviteCode,
+    bool? isSuspended,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -35,11 +38,19 @@ class ServerEntity extends Equatable {
       iconUrl: iconUrl ?? this.iconUrl,
       ownerId: ownerId ?? this.ownerId,
       inviteCode: inviteCode ?? this.inviteCode,
+      isSuspended: isSuspended ?? this.isSuspended,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
   @override
-  List<Object?> get props => [serverId, name, iconUrl, ownerId, inviteCode];
+  List<Object?> get props => [
+    serverId,
+    name,
+    iconUrl,
+    ownerId,
+    inviteCode,
+    isSuspended,
+  ];
 }

@@ -18,6 +18,7 @@ import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/create_profile_screen.dart';
+import '../../features/admin/presentation/screens/admin_console_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/server/presentation/screens/role_management_screen.dart';
 import '../../features/server/presentation/screens/server_settings_screen.dart';
@@ -125,6 +126,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppConstants.channelManagementPath,
         builder: (_, __) => const ChannelManagementScreen(),
+      ),
+      GoRoute(
+        path: AppConstants.adminConsolePath,
+        builder: (_, __) => const AdminConsoleScreen(),
       ),
       // ── Part 14: Friend & DM routes ──────────────────────────────
       GoRoute(

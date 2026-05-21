@@ -8,6 +8,8 @@ class UserModel {
   final String avatarUrl;
   final String bio;
   final String status;
+  final bool isSuperAdmin;
+  final bool isDisabled;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime lastSeenAt;
@@ -19,6 +21,8 @@ class UserModel {
     this.avatarUrl = '',
     this.bio = '',
     this.status = 'OFFLINE',
+    this.isSuperAdmin = false,
+    this.isDisabled = false,
     required this.createdAt,
     required this.updatedAt,
     required this.lastSeenAt,
@@ -32,6 +36,8 @@ class UserModel {
       avatarUrl: map['avatarUrl'] as String? ?? '',
       bio: map['bio'] as String? ?? '',
       status: map['status'] as String? ?? 'OFFLINE',
+      isSuperAdmin: map['isSuperAdmin'] as bool? ?? false,
+      isDisabled: map['isDisabled'] as bool? ?? false,
       createdAt: _parseTimestamp(map['createdAt']),
       updatedAt: _parseTimestamp(map['updatedAt']),
       lastSeenAt: _parseTimestamp(map['lastSeenAt']),
@@ -45,6 +51,8 @@ class UserModel {
       'avatarUrl': avatarUrl,
       'bio': bio,
       'status': status,
+      'isSuperAdmin': isSuperAdmin,
+      'isDisabled': isDisabled,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       'lastSeenAt': FieldValue.serverTimestamp(),
@@ -79,6 +87,8 @@ class UserModel {
       avatarUrl: avatarUrl,
       bio: bio,
       status: _mapStatus(status),
+      isSuperAdmin: isSuperAdmin,
+      isDisabled: isDisabled,
       createdAt: createdAt,
       updatedAt: updatedAt,
       lastSeenAt: lastSeenAt,
@@ -93,6 +103,8 @@ class UserModel {
       avatarUrl: entity.avatarUrl,
       bio: entity.bio,
       status: entity.status.name.toUpperCase(),
+      isSuperAdmin: entity.isSuperAdmin,
+      isDisabled: entity.isDisabled,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
       lastSeenAt: entity.lastSeenAt,

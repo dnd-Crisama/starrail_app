@@ -8,6 +8,7 @@ class ServerModel {
   final String iconUrl;
   final String ownerId;
   final String inviteCode;
+  final bool isSuspended;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -17,6 +18,7 @@ class ServerModel {
     this.iconUrl = '',
     required this.ownerId,
     required this.inviteCode,
+    this.isSuspended = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -28,6 +30,7 @@ class ServerModel {
       iconUrl: map['iconUrl'] as String? ?? '',
       ownerId: map['ownerId'] as String? ?? '',
       inviteCode: map['inviteCode'] as String? ?? '',
+      isSuspended: map['isSuspended'] as bool? ?? false,
       createdAt: _parseTimestamp(map['createdAt']),
       updatedAt: _parseTimestamp(map['updatedAt']),
     );
@@ -39,6 +42,7 @@ class ServerModel {
       'iconUrl': iconUrl,
       'ownerId': ownerId,
       'inviteCode': inviteCode,
+      'isSuspended': isSuspended,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -58,6 +62,7 @@ class ServerModel {
       iconUrl: iconUrl,
       ownerId: ownerId,
       inviteCode: inviteCode,
+      isSuspended: isSuspended,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
@@ -70,6 +75,7 @@ class ServerModel {
       iconUrl: entity.iconUrl,
       ownerId: entity.ownerId,
       inviteCode: entity.inviteCode,
+      isSuspended: entity.isSuspended,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
     );

@@ -58,7 +58,9 @@ final getUserServersUseCaseProvider = Provider<GetUserServersUseCase>((ref) {
   return GetUserServersUseCase(ref.watch(_serverRepositoryProvider));
 });
 
-final getServerMembersUseCaseProvider = Provider<GetServerMembersUseCase>((ref) {
+final getServerMembersUseCaseProvider = Provider<GetServerMembersUseCase>((
+  ref,
+) {
   return GetServerMembersUseCase(ref.watch(_serverRepositoryProvider));
 });
 
@@ -277,12 +279,13 @@ class ServerSettingsNotifier extends StateNotifier<ServerSettingsState> {
       final imageUrl = await CloudinaryStorageDatasource().uploadImage(
         imageFile,
       );
-      await FirebaseFirestore.instance.collection('servers').doc(serverId).update(
-        {
-          'iconUrl': imageUrl,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-      );
+      await FirebaseFirestore.instance
+          .collection('servers')
+          .doc(serverId)
+          .update({
+            'iconUrl': imageUrl,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
       state = state.copyWith(isLoading: false);
       return true;
     } catch (e) {

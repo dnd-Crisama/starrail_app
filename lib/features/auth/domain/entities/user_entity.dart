@@ -9,6 +9,8 @@ class UserEntity extends Equatable {
   final String avatarUrl;
   final String bio;
   final UserStatus status;
+  final bool isSuperAdmin;
+  final bool isDisabled;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime lastSeenAt;
@@ -20,6 +22,8 @@ class UserEntity extends Equatable {
     this.avatarUrl = '',
     this.bio = '',
     this.status = UserStatus.offline,
+    this.isSuperAdmin = false,
+    this.isDisabled = false,
     required this.createdAt,
     required this.updatedAt,
     required this.lastSeenAt,
@@ -32,6 +36,8 @@ class UserEntity extends Equatable {
     String? avatarUrl,
     String? bio,
     UserStatus? status,
+    bool? isSuperAdmin,
+    bool? isDisabled,
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? lastSeenAt,
@@ -43,6 +49,8 @@ class UserEntity extends Equatable {
       avatarUrl: avatarUrl ?? this.avatarUrl,
       bio: bio ?? this.bio,
       status: status ?? this.status,
+      isSuperAdmin: isSuperAdmin ?? this.isSuperAdmin,
+      isDisabled: isDisabled ?? this.isDisabled,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
@@ -50,5 +58,14 @@ class UserEntity extends Equatable {
   }
 
   @override
-  List<Object?> get props => [uid, username, email, avatarUrl, bio, status];
+  List<Object?> get props => [
+    uid,
+    username,
+    email,
+    avatarUrl,
+    bio,
+    status,
+    isSuperAdmin,
+    isDisabled,
+  ];
 }

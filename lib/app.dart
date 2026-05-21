@@ -23,8 +23,7 @@ class _AppLifecycleObserver extends WidgetsBindingObserver {
     if (user == null) return;
 
     // Không ghi đè trạng thái nếu người dùng đã chọn Vô hình hoặc Không làm phiền
-    if (user.status == UserStatus.invisible ||
-        user.status == UserStatus.dnd) {
+    if (user.status == UserStatus.invisible || user.status == UserStatus.dnd) {
       return;
     }
 
@@ -88,6 +87,22 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
         ref.invalidate(unreadStatusNotifierProvider);
       },
     );
+
+    ref.listen(userServersStreamProvider, (previous, next) {
+      next.whenData((servers) {
+        final selectedServerId = ref.read(selectedServerIdProvider);
+        if (selectedServerId == null) return;
+
+        final canAccessSelectedServer = servers.any(
+          (server) => server.serverId == selectedServerId,
+        );
+        if (canAccessSelectedServer) return;
+
+        ref.read(selectedServerIdProvider.notifier).state = null;
+        ref.read(selectedChannelIdProvider.notifier).state = null;
+        ref.read(selectedServerNameProvider.notifier).state = 'Direct Messages';
+      });
+    });
 
     final router = ref.watch(routerProvider);
     return MaterialApp.router(

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -10,6 +8,8 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/profile_provider.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/screens/profile_screen.dart';
+import '../../../admin/presentation/providers/admin_provider.dart';
+import '../../../admin/presentation/screens/admin_console_screen.dart';
 import '../../../message/presentation/providers/message_provider.dart';
 import '../providers/home_provider.dart';
 import '../../../server/presentation/screens/create_server_screen.dart';
@@ -55,6 +55,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    _listenForSuspendedSelectedServer();
+
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < AppConstants.mobileBreakpoint;
 
@@ -65,6 +67,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             ? _buildMobileLayout(context)
             : _buildDesktopLayout(context, ref),
       ),
+    );
+  }
+
+  void _listenForSuspendedSelectedServer() {
+    ref.listen(userServersStreamProvider, (previous, next) {
+      next.whenData((servers) {
+        final selectedServerId = ref.read(selectedServerIdProvider);
+        if (selectedServerId == null) return;
+
+        final isSuperAdmin = ref
+            .read(isCurrentUserSuperAdminProvider)
+            .maybeWhen(data: (value) => value, orElse: () => false);
+        if (isSuperAdmin) return;
+
+        final selectedServer = servers
+            .where((server) => server.serverId == selectedServerId)
+            .firstOrNull;
+        if (selectedServer == null || !selectedServer.isSuspended) return;
+
+        ref.read(selectedServerIdProvider.notifier).state = null;
+        ref.read(selectedChannelIdProvider.notifier).state = null;
+        ref.read(selectedServerNameProvider.notifier).state = 'Direct Messages';
+        if (!mounted) return;
+        _showSuspendedServerMessage();
+      });
+    });
+  }
+
+  void _showSuspendedServerMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Server này đang bị tạm khóa.')),
     );
   }
 
@@ -205,6 +238,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Widget _buildDrawerServerStrip(BuildContext context) {
     final serverListState = ref.watch(userServersStreamProvider);
     final selectedServerId = ref.watch(selectedServerIdProvider);
+    final isSuperAdmin = ref
+        .watch(isCurrentUserSuperAdminProvider)
+        .maybeWhen(data: (value) => value, orElse: () => false);
 
     return Container(
       width: 72,
@@ -212,6 +248,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       child: Column(
         children: [
           const SizedBox(height: 12),
+          if (isSuperAdmin) ...[
+            ServerIconButton(
+              isSelected: false,
+              indicatorStyle: ServerIconIndicatorStyle.sidePill,
+              bottomPadding: 4,
+              child: const Icon(
+                Icons.admin_panel_settings_rounded,
+                color: AppColors.green,
+                size: 24,
+              ),
+              onTap: () {
+                _closeDrawer();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AdminConsoleScreen()),
+                );
+              },
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Container(
+                width: 32,
+                height: 2,
+                decoration: BoxDecoration(
+                  color: AppColors.divider,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            ),
+          ],
           // DM button
           ServerIconButton(
             isSelected: selectedServerId == null,
@@ -256,24 +322,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   itemBuilder: (context, index) {
                     final server = servers[index];
                     final isSelected = selectedServerId == server.serverId;
+                    final isLockedForUser = server.isSuspended && !isSuperAdmin;
+
                     return ServerIconButton(
                       isSelected: isSelected,
                       indicatorStyle: ServerIconIndicatorStyle.sidePill,
                       bottomPadding: 4,
-                      hasUnread: _serverHasUnread(server.serverId),
-                      child: server.iconUrl.isNotEmpty
-                          ? Image.network(
-                              server.iconUrl,
-                              width: 48,
-                              height: 48,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => ServerIconInitial(
-                                name: server.name,
-                                fontSize: 16,
-                              ),
-                            )
-                          : ServerIconInitial(name: server.name, fontSize: 16),
+                      hasUnread:
+                          !isLockedForUser && _serverHasUnread(server.serverId),
+                      child: _buildServerIconContent(
+                        server,
+                        isLocked: isLockedForUser,
+                        fontSize: 16,
+                      ),
                       onTap: () {
+                        if (isLockedForUser) {
+                          _showSuspendedServerMessage();
+                          return;
+                        }
+
                         _selectServerAndFirstVisibleChannel(server);
                         _closeDrawer();
                       },
@@ -599,45 +666,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     return ref.watch(serverHasUnreadProvider(serverId));
   }
 
+  Widget _buildServerIconContent(
+    ServerEntity server, {
+    required bool isLocked,
+    double fontSize = 18,
+  }) {
+    final icon = server.iconUrl.isNotEmpty
+        ? Image.network(
+            server.iconUrl,
+            width: 48,
+            height: 48,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) =>
+                ServerIconInitial(name: server.name, fontSize: fontSize),
+          )
+        : ServerIconInitial(name: server.name, fontSize: fontSize);
+
+    if (!isLocked) return icon;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Opacity(opacity: 0.45, child: icon),
+        Container(color: Colors.black.withValues(alpha: 0.35)),
+        const Center(
+          child: Icon(Icons.lock_rounded, color: AppColors.white, size: 20),
+        ),
+      ],
+    );
+  }
+
   Future<List<ChannelEntity>> _filterVisibleChannels(
     String serverId,
     List<ChannelEntity> channels,
   ) async {
-    final currentUser = ref.read(authNotifierProvider).user;
-    if (currentUser == null) return [];
-
-    final isOwner = ref.read(isServerOwnerProvider(serverId));
-    if (isOwner) return channels;
-
-    final canViewServer = await ref.read(
-      hasPermissionProvider((
-        serverId: serverId,
-        userId: currentUser.uid,
-        permission: Permission.viewChannel,
-      )).future,
-    );
-    if (!canViewServer) return [];
-
-    final hasChannelOverrides = channels.any(
-      (channel) => channel.allowedViewRoleIds.isNotEmpty,
-    );
-    if (!hasChannelOverrides) return channels;
-
-    final memberDoc = await FirebaseFirestore.instance
-        .collection('servers')
-        .doc(serverId)
-        .collection('members')
-        .doc(currentUser.uid)
-        .get();
-    final roleIds = List<String>.from(
-      memberDoc.data()?['roleIds'] as List? ?? const [],
-    );
-
-    return channels.where((channel) {
-      final allowedRoleIds = channel.allowedViewRoleIds;
-      if (allowedRoleIds.isEmpty) return true;
-      return roleIds.any(allowedRoleIds.contains);
-    }).toList();
+    return ref.read(visibleServerChannelsProvider(serverId).future);
   }
 
   Future<void> _selectServerAndFirstVisibleChannel(ServerEntity server) async {
@@ -933,9 +996,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
 
     final channelsState = ref.watch(
-      serverChannelsStreamProvider(selectedServerId),
+      visibleServerChannelsProvider(selectedServerId),
     );
     final selectedChannelId = ref.watch(selectedChannelIdProvider);
+    final currentUserId =
+        ref.watch(authNotifierProvider.select((state) => state.user?.uid)) ??
+        '';
+    final isOwner = ref.watch(isServerOwnerProvider(selectedServerId));
+    final canManageChannels = currentUserId.isNotEmpty
+        ? ref.watch(
+            hasPermissionProvider((
+              serverId: selectedServerId,
+              userId: currentUserId,
+              permission: Permission.manageChannel,
+            )),
+          )
+        : const AsyncValue<bool>.data(false);
+    final canCreateChannel =
+        isOwner ||
+        canManageChannels.maybeWhen(
+          data: (value) => value,
+          orElse: () => false,
+        );
 
     return channelsState.when(
       data: (channels) {
@@ -973,10 +1055,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             // Kênh văn bản — luôn hiện header để tạo nhanh
             _buildCategoryHeader(
               'KÊNH VĂN BẢN',
-              onAdd: () => _showQuickCreateChannel(
-                serverId: selectedServerId,
-                type: ChannelType.text,
-              ),
+              onAdd: canCreateChannel
+                  ? () => _showQuickCreateChannel(
+                      serverId: selectedServerId,
+                      type: ChannelType.text,
+                    )
+                  : null,
             ),
             if (textChannels.isEmpty)
               Padding(
@@ -1005,10 +1089,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             // Kênh thoại — luôn hiện header để tạo nhanh
             _buildCategoryHeader(
               'KÊNH THOẠI',
-              onAdd: () => _showQuickCreateChannel(
-                serverId: selectedServerId,
-                type: ChannelType.voice,
-              ),
+              onAdd: canCreateChannel
+                  ? () => _showQuickCreateChannel(
+                      serverId: selectedServerId,
+                      type: ChannelType.voice,
+                    )
+                  : null,
             ),
             if (voiceChannels.isEmpty)
               Padding(
@@ -1065,19 +1151,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       child: Row(
         children: [
           Expanded(child: Text(name, style: AppTextStyles.categoryHeader)),
-          SizedBox(
-            width: 20,
-            height: 20,
-            child: InkWell(
-              onTap: onAdd,
-              customBorder: const CircleBorder(),
-              child: const Icon(
-                Icons.add,
-                color: AppColors.channelDefault,
-                size: 16,
+          if (onAdd != null)
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: InkWell(
+                onTap: onAdd,
+                customBorder: const CircleBorder(),
+                child: const Icon(
+                  Icons.add,
+                  color: AppColors.channelDefault,
+                  size: 16,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

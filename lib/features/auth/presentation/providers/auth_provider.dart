@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../firebase_options.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/usecases/usecase.dart';
 import '../../domain/entities/user_entity.dart';
@@ -25,10 +27,25 @@ final _userRemoteDatasourceProvider = Provider<UserRemoteDatasource>((ref) {
   return UserRemoteDatasourceImpl(firestore: FirebaseFirestore.instance);
 });
 
+final firebaseDatabaseProvider = Provider<FirebaseDatabase>((ref) {
+  final databaseUrl = DefaultFirebaseOptions.currentPlatform.databaseURL;
+
+  if (databaseUrl == null) {
+    return FirebaseDatabase.instance;
+  }
+
+  return FirebaseDatabase.instanceFor(
+    app: Firebase.app(),
+    databaseURL: databaseUrl,
+  );
+});
+
 final _presenceRemoteDatasourceProvider = Provider<PresenceRemoteDatasource>((
   ref,
 ) {
-  return PresenceRemoteDatasourceImpl(database: FirebaseDatabase.instance);
+  return PresenceRemoteDatasourceImpl(
+    database: ref.watch(firebaseDatabaseProvider),
+  );
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -115,6 +132,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> appStarted() async {
     try {
       final userEntity = await _authRepository.getCurrentUser();
+      if (userEntity.isDisabled) {
+        await _logoutUseCase(const NoParams());
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: 'Tài khoản của bạn đã bị khóa.',
+          clearUser: true,
+        );
+        return;
+      }
       state = state.copyWith(
         user: userEntity,
         isLoading: false,
@@ -160,11 +186,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
           clearUser: true,
         );
       },
-      ifRight: (user) => state.copyWith(
-        isLoading: false,
-        user: user,
-        needsProfileCreation: false,
-      ),
+      ifRight: (user) {
+        if (user.isDisabled) {
+          _logoutUseCase(const NoParams());
+          return state.copyWith(
+            isLoading: false,
+            errorMessage: 'Tài khoản của bạn đã bị khóa.',
+            clearUser: true,
+          );
+        }
+        return state.copyWith(
+          isLoading: false,
+          user: user,
+          needsProfileCreation: false,
+        );
+      },
     );
   }
 
