@@ -16,6 +16,7 @@ abstract class DmRemoteDatasource {
   Future<DmChatModel> createGroupDm({
     required List<String> participantIds,
     required String name,
+    String? iconUrl,
   });
 
   /// Stream danh sách cuộc hội thoại DM của user.
@@ -46,6 +47,17 @@ abstract class DmRemoteDatasource {
 
   /// Lấy thông tin một chat.
   Future<DmChatModel> getDmChat(String chatId);
+
+  /// Xóa cuộc hội thoại DM.
+  Future<void> deleteDmChat(String chatId);
+
+  /// Cập nhật thông tin Group DM.
+  Future<void> updateGroupDm({
+    required String chatId,
+    required String name,
+    String? iconUrl,
+    List<String>? participantIds,
+  });
 }
 
 class DmRemoteDatasourceImpl implements DmRemoteDatasource {
@@ -120,6 +132,7 @@ class DmRemoteDatasourceImpl implements DmRemoteDatasource {
   Future<DmChatModel> createGroupDm({
     required List<String> participantIds,
     required String name,
+    String? iconUrl,
   }) async {
     try {
       final currentId = _currentUserId;
@@ -134,6 +147,7 @@ class DmRemoteDatasourceImpl implements DmRemoteDatasource {
         'type': 'GROUP_DM',
         'participants': allParticipants,
         'name': name,
+        if (iconUrl != null) 'iconUrl': iconUrl,
         'createdAt': FieldValue.serverTimestamp(),
         'lastMessageAt': FieldValue.serverTimestamp(),
         'lastMessagePreview': '',
@@ -146,6 +160,7 @@ class DmRemoteDatasourceImpl implements DmRemoteDatasource {
         type: 'GROUP_DM',
         participants: allParticipants,
         name: name,
+        iconUrl: iconUrl,
         createdAt: now,
         lastMessageAt: now,
       );
@@ -297,6 +312,49 @@ class DmRemoteDatasourceImpl implements DmRemoteDatasource {
     } catch (e) {
       if (e is ServerException) rethrow;
       throw ServerException(message: 'Lấy thông tin chat thất bại: $e');
+    }
+  }
+
+  @override
+  Future<void> deleteDmChat(String chatId) async {
+    try {
+      final currentId = _currentUserId;
+      final doc = await firestore.collection('userChats').doc(chatId).get();
+      if (!doc.exists) {
+        throw const ServerException(message: 'Cuộc hội thoại không tồn tại');
+      }
+
+      final data = doc.data();
+      final isGroup = data?['type'] == 'GROUP_DM';
+      if (isGroup) {
+        final participants = List<String>.from(data?['participants'] as List? ?? []);
+        if (participants.isEmpty || participants.first != currentId) {
+          throw const ServerException(message: 'Chỉ chủ nhóm mới được xóa group chat');
+        }
+      }
+
+      await firestore.collection('userChats').doc(chatId).delete();
+    } catch (e) {
+      if (e is ServerException) rethrow;
+      throw ServerException(message: 'Xóa cuộc hội thoại thất bại: $e');
+    }
+  }
+
+  @override
+  Future<void> updateGroupDm({
+    required String chatId,
+    required String name,
+    String? iconUrl,
+    List<String>? participantIds,
+  }) async {
+    try {
+      await firestore.collection('userChats').doc(chatId).update({
+        'name': name,
+        if (iconUrl != null) 'iconUrl': iconUrl,
+        if (participantIds != null) 'participants': participantIds,
+      });
+    } catch (e) {
+      throw ServerException(message: 'Cập nhật nhóm thất bại: $e');
     }
   }
 }

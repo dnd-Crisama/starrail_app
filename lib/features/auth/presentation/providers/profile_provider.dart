@@ -12,7 +12,7 @@ import '../../data/datasources/presence_remote_datasource.dart';
 import '../../data/repositories/user_repository_impl.dart';
 import 'auth_provider.dart';
 
-final _storageDatasourceProvider = Provider<StorageRemoteDatasource>((ref) {
+final storageDatasourceProvider = Provider<StorageRemoteDatasource>((ref) {
   return CloudinaryStorageDatasource();
 });
 
@@ -28,7 +28,7 @@ final _userRepoProvider = Provider<UserRepository>((ref) {
     userRemoteDatasource: UserRemoteDatasourceImpl(
       firestore: FirebaseFirestore.instance,
     ),
-    storageRemoteDatasource: ref.watch(_storageDatasourceProvider),
+    storageRemoteDatasource: ref.watch(storageDatasourceProvider),
     presenceRemoteDatasource: ref.watch(_presenceDatasourceProvider),
     currentUserId: currentUserId ?? '',
   );
@@ -160,7 +160,7 @@ final profileNotifierProvider =
       return ProfileNotifier(
         updateProfileUseCase: ref.watch(updateProfileUseCaseProvider),
         updateStatusUseCase: ref.watch(updateStatusUseCaseProvider),
-        storageDatasource: ref.watch(_storageDatasourceProvider),
+        storageDatasource: ref.watch(storageDatasourceProvider),
         ref: ref,
       );
     });

@@ -12,6 +12,8 @@ import '../../domain/usecases/get_dm_chats_usecase.dart';
 import '../../domain/usecases/get_dm_messages_usecase.dart';
 import '../../domain/usecases/get_or_create_dm_chat_usecase.dart';
 import '../../domain/usecases/send_dm_message_usecase.dart';
+import '../../domain/usecases/delete_dm_chat_usecase.dart';
+import '../../domain/usecases/update_group_dm_usecase.dart';
 import '../../data/datasources/dm_remote_datasource.dart';
 import '../../data/repositories/dm_repository_impl.dart';
 
@@ -52,6 +54,14 @@ final deleteDmMessageUseCaseProvider = Provider<DeleteDmMessageUseCase>(
 
 final getDmChatsUseCaseProvider = Provider<GetDmChatsUseCase>(
   (ref) => GetDmChatsUseCase(ref.watch(dmRepositoryProvider)),
+);
+
+final deleteDmChatUseCaseProvider = Provider<DeleteDmChatUseCase>(
+  (ref) => DeleteDmChatUseCase(ref.watch(dmRepositoryProvider)),
+);
+
+final updateGroupDmUseCaseProvider = Provider<UpdateGroupDmUseCase>(
+  (ref) => UpdateGroupDmUseCase(ref.watch(dmRepositoryProvider)),
 );
 
 // ── Stream Providers ───────────────────────────────────────────
@@ -134,12 +144,21 @@ class DmMessageState {
 class DmChatNotifier extends StateNotifier<DmChatState> {
   final GetOrCreateDmChatUseCase _getOrCreate;
   final CreateGroupDmUseCase _createGroup;
+  final DeleteDmChatUseCase _deleteDmChat;
+  final UpdateGroupDmUseCase _updateGroupDm;
+  final Ref _ref;
 
   DmChatNotifier({
     required GetOrCreateDmChatUseCase getOrCreate,
     required CreateGroupDmUseCase createGroup,
+    required DeleteDmChatUseCase deleteDmChat,
+    required UpdateGroupDmUseCase updateGroupDm,
+    required Ref ref,
   }) : _getOrCreate = getOrCreate,
        _createGroup = createGroup,
+       _deleteDmChat = deleteDmChat,
+       _updateGroupDm = updateGroupDm,
+       _ref = ref,
        super(const DmChatState());
 
   /// Mở hoặc tạo DM 1-1 với user khác.
@@ -167,10 +186,15 @@ class DmChatNotifier extends StateNotifier<DmChatState> {
   Future<DmChatEntity?> createGroupDm({
     required List<String> participantIds,
     required String name,
+    String? iconUrl,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
     final result = await _createGroup(
-      CreateGroupDmParams(participantIds: participantIds, name: name),
+      CreateGroupDmParams(
+        participantIds: participantIds,
+        name: name,
+        iconUrl: iconUrl,
+      ),
     );
     return result.fold(
       ifLeft: (f) {
@@ -189,6 +213,51 @@ class DmChatNotifier extends StateNotifier<DmChatState> {
 
   void clearNavigation() {
     state = DmChatState(isLoading: false, error: state.error);
+  }
+
+  /// Xóa cuộc hội thoại DM.
+  Future<bool> deleteDmChat(String chatId) async {
+    state = state.copyWith(isLoading: true, error: null);
+    final result = await _deleteDmChat(DeleteDmChatParams(chatId: chatId));
+    return result.fold(
+      ifLeft: (f) {
+        state = state.copyWith(isLoading: false, error: f.message);
+        return false;
+      },
+      ifRight: (_) {
+        state = state.copyWith(isLoading: false);
+        return true;
+      },
+    );
+  }
+
+  /// Cập nhật thông tin Group DM.
+  Future<bool> updateGroupDm({
+    required String chatId,
+    required String name,
+    String? iconUrl,
+    List<String>? participantIds,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+    final result = await _updateGroupDm(
+      UpdateGroupDmParams(
+        chatId: chatId,
+        name: name,
+        iconUrl: iconUrl,
+        participantIds: participantIds,
+      ),
+    );
+    return result.fold(
+      ifLeft: (f) {
+        state = state.copyWith(isLoading: false, error: f.message);
+        return false;
+      },
+      ifRight: (_) {
+        state = state.copyWith(isLoading: false);
+        _ref.invalidate(dmChatDetailProvider(chatId));
+        return true;
+      },
+    );
   }
 }
 
@@ -253,6 +322,9 @@ final dmChatNotifierProvider =
       return DmChatNotifier(
         getOrCreate: ref.watch(getOrCreateDmChatUseCaseProvider),
         createGroup: ref.watch(createGroupDmUseCaseProvider),
+        deleteDmChat: ref.watch(deleteDmChatUseCaseProvider),
+        updateGroupDm: ref.watch(updateGroupDmUseCaseProvider),
+        ref: ref,
       );
     });
 

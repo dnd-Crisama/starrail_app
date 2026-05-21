@@ -6,6 +6,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/dm_chat_entity.dart';
 import '../providers/friend_provider.dart';
+import '../providers/dm_provider.dart';
 
 /// Widget hiển thị một cuộc hội thoại DM trong danh sách.
 class DmChatTile extends ConsumerWidget {
@@ -23,9 +24,11 @@ class DmChatTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentUserId = ref.watch(authNotifierProvider).user?.uid ?? '';
+    final isOwnerOr1to1 = !chat.isGroupDm ||
+        (chat.participants.isNotEmpty && chat.participants.first == currentUserId);
 
     if (chat.isGroupDm) {
-      return _buildGroupTile(context);
+      return _buildGroupTile(context, ref, isOwnerOr1to1);
     }
 
     // DM 1-1: load thông tin người kia
@@ -40,28 +43,34 @@ class DmChatTile extends ConsumerWidget {
         final avatarUrl = user?.avatarUrl ?? '';
         return _buildTile(
           context: context,
+          ref: ref,
           displayName: displayName,
           avatarUrl: avatarUrl,
           isGroup: false,
+          showDelete: isOwnerOr1to1,
         );
       },
     );
   }
 
-  Widget _buildGroupTile(BuildContext context) {
+  Widget _buildGroupTile(BuildContext context, WidgetRef ref, bool showDelete) {
     return _buildTile(
       context: context,
+      ref: ref,
       displayName: chat.name.isNotEmpty ? chat.name : 'Group DM',
       avatarUrl: chat.iconUrl ?? '',
       isGroup: true,
+      showDelete: showDelete,
     );
   }
 
   Widget _buildTile({
     required BuildContext context,
+    required WidgetRef ref,
     required String displayName,
     required String avatarUrl,
     required bool isGroup,
+    required bool showDelete,
   }) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
@@ -104,13 +113,65 @@ class DmChatTile extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
               )
             : null,
+        trailing: showDelete
+            ? IconButton(
+                icon: const Icon(Icons.close, size: 16, color: AppColors.textMuted),
+                onPressed: () => _showDeleteWarningDialog(context, ref),
+                splashRadius: 16,
+                tooltip: 'Xóa cuộc trò chuyện',
+              )
+            : null,
       ),
+    );
+  }
+
+  Future<void> _showDeleteWarningDialog(BuildContext context, WidgetRef ref) async {
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.bgSecondary,
+          title: const Text('Xóa cuộc hội thoại', style: AppTextStyles.headerPrimary),
+          content: const Text(
+            'Bạn có chắc chắn muốn xóa cuộc trò chuyện này? Tất cả tin nhắn trong cuộc trò chuyện này sẽ bị xóa vĩnh viễn và không thể khôi phục.',
+            style: AppTextStyles.textNormal,
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Hủy bỏ', style: TextStyle(color: AppColors.textMuted)),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+              },
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.red,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              ),
+              child: const Text('Xóa'),
+              onPressed: () async {
+                Navigator.of(ctx).pop(); // close warning dialog first
+                final success = await ref.read(dmChatNotifierProvider.notifier).deleteDmChat(chat.chatId);
+                if (success && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Đã xóa cuộc hội thoại thành công'),
+                      backgroundColor: AppColors.brand,
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
   Widget _buildLoadingTile() {
     return ListTile(
-      leading: CircleAvatar(radius: 18, backgroundColor: AppColors.bgTertiary),
+      leading: const CircleAvatar(radius: 18, backgroundColor: AppColors.bgTertiary),
       title: Container(
         height: 12,
         width: 80,

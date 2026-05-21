@@ -8,9 +8,14 @@ import '../repositories/dm_repository.dart';
 class CreateGroupDmParams extends Equatable {
   final List<String> participantIds;
   final String name;
-  const CreateGroupDmParams({required this.participantIds, required this.name});
+  final String? iconUrl;
+  const CreateGroupDmParams({
+    required this.participantIds,
+    required this.name,
+    this.iconUrl,
+  });
   @override
-  List<Object?> get props => [participantIds, name];
+  List<Object?> get props => [participantIds, name, iconUrl];
 }
 
 class CreateGroupDmUseCase
@@ -20,11 +25,6 @@ class CreateGroupDmUseCase
 
   @override
   Future<Either<Failure, DmChatEntity>> call(CreateGroupDmParams params) {
-    if (params.name.trim().isEmpty) {
-      return Future.value(
-        Either.left(const ServerFailure(message: 'Tên nhóm không được để trống')),
-      );
-    }
     if (params.participantIds.length < 2) {
       return Future.value(
         Either.left(
@@ -37,6 +37,7 @@ class CreateGroupDmUseCase
     return _repository.createGroupDm(
       participantIds: params.participantIds,
       name: params.name.trim(),
+      iconUrl: params.iconUrl,
     );
   }
 }

@@ -11,6 +11,9 @@ import '../../domain/entities/dm_message_entity.dart';
 import '../providers/dm_provider.dart';
 import '../providers/friend_provider.dart';
 import '../widgets/dm_message_bubble.dart';
+import '../widgets/group_member_list_panel.dart';
+import '../widgets/edit_group_dm_dialog.dart';
+import '../widgets/add_group_members_dialog.dart';
 
 /// Màn hình chat DM — hoạt động cho cả DM 1-1 và Group DM.
 class DmChatScreen extends ConsumerStatefulWidget {
@@ -25,6 +28,7 @@ class DmChatScreen extends ConsumerStatefulWidget {
 class _DmChatScreenState extends ConsumerState<DmChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
+  bool _showMemberList = true;
 
   @override
   void dispose() {
@@ -53,50 +57,75 @@ class _DmChatScreenState extends ConsumerState<DmChatScreen> {
         ),
         data: (chat) => _buildAppBar(chat, currentUser?.uid ?? ''),
       ),
-      body: Column(
-        children: [
-          // Messages list
-          Expanded(
-            child: messagesAsync.when(
-              loading: () => const Center(
-                child: CircularProgressIndicator(color: AppColors.brand),
-              ),
-              error: (e, _) => Center(
-                child: Text(
-                  'Lỗi tải tin nhắn: $e',
-                  style: AppTextStyles.textMuted,
-                ),
-              ),
-              data: (messages) => _buildMessageList(
-                messages,
-                currentUser?.uid ?? '',
-              ),
-            ),
+      body: chatAsync.when(
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: AppColors.brand),
+        ),
+        error: (e, _) => Center(
+          child: Text(
+            'Lỗi: $e',
+            style: AppTextStyles.textMuted,
           ),
-          // Error message nếu gửi thất bại
-          if (messageState.error != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              color: AppColors.red.withValues(alpha: 0.1),
-              child: Row(
-                children: [
-                  const Icon(Icons.error_outline, color: AppColors.red, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      messageState.error!,
-                      style: AppTextStyles.textMuted.copyWith(
-                        color: AppColors.red,
-                        fontSize: 12,
+        ),
+        data: (chat) {
+          if (chat == null) {
+            return const Center(child: Text('Không tìm thấy cuộc trò chuyện'));
+          }
+
+          return Row(
+            children: [
+              Expanded(
+                child: Column(
+                  children: [
+                    // Messages list
+                    Expanded(
+                      child: messagesAsync.when(
+                        loading: () => const Center(
+                          child: CircularProgressIndicator(color: AppColors.brand),
+                        ),
+                        error: (e, _) => Center(
+                          child: Text(
+                            'Lỗi tải tin nhắn: $e',
+                            style: AppTextStyles.textMuted,
+                          ),
+                        ),
+                        data: (messages) => _buildMessageList(
+                          messages,
+                          currentUser?.uid ?? '',
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                    // Error message nếu gửi thất bại
+                    if (messageState.error != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        color: AppColors.red.withValues(alpha: 0.1),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline, color: AppColors.red, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                messageState.error!,
+                                style: AppTextStyles.textMuted.copyWith(
+                                  color: AppColors.red,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    // Message input
+                    _buildMessageInput(messageState, currentUser?.uid ?? ''),
+                  ],
+                ),
               ),
-            ),
-          // Message input
-          _buildMessageInput(messageState, currentUser?.uid ?? ''),
-        ],
+              if (chat.isGroupDm && _showMemberList)
+                GroupMemberListPanel(chat: chat),
+            ],
+          );
+        },
       ),
     );
   }
@@ -126,18 +155,76 @@ class _DmChatScreenState extends ConsumerState<DmChatScreen> {
                   : null,
             ),
             const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(chat.name, style: AppTextStyles.headerPrimary),
-                Text(
-                  '${chat.participants.length} thành viên',
-                  style: AppTextStyles.textMuted.copyWith(fontSize: 11),
-                ),
-              ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          chat.name,
+                          style: AppTextStyles.headerPrimary,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Tooltip(
+                        message: 'Chỉnh Sửa Nhóm',
+                        child: GestureDetector(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (_) => EditGroupDmDialog(chat: chat),
+                            );
+                          },
+                          child: const Icon(
+                            Icons.edit,
+                            size: 14,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    '${chat.participants.length} thành viên',
+                    style: AppTextStyles.textMuted.copyWith(fontSize: 11),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.person_add_alt_1_outlined,
+              color: AppColors.textNormal,
+            ),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => AddGroupMembersDialog(chat: chat),
+              );
+            },
+            tooltip: 'Thêm Bạn bè vào DM Nhóm',
+          ),
+          IconButton(
+            icon: Icon(
+              Icons.people_alt,
+              color: _showMemberList ? AppColors.textNormal : AppColors.textMuted,
+            ),
+            onPressed: () {
+              setState(() {
+                _showMemberList = !_showMemberList;
+              });
+            },
+            tooltip: 'Danh sách thành viên',
+          ),
+        ],
       );
     }
 

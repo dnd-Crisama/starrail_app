@@ -7,8 +7,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/dm_provider.dart';
-import '../providers/friend_provider.dart';
 import '../widgets/dm_chat_tile.dart';
+import '../widgets/create_group_dm_dialog.dart';
+
 
 /// Danh sách các cuộc hội thoại DM — tích hợp vào HomeScreen sidebar.
 /// Có thể dùng standalone hoặc nhúng vào layout.
@@ -133,138 +134,17 @@ class DmListScreen extends ConsumerWidget {
     WidgetRef ref,
     String currentUserId,
   ) async {
-    final groupNameController = TextEditingController();
-    final friendsAsync = ref.read(friendsStreamProvider);
-
-    final friends = friendsAsync.maybeWhen(
-      data: (list) => list,
-      orElse: () => [],
-    );
-
-    final selectedIds = <String>{};
-
-    // Cache notifier TR\u01af\u1edaC showDialog để tránh "ref after dispose"
-    final dmNotifier = ref.read(dmChatNotifierProvider.notifier);
-
-    await showDialog(
+    showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          return AlertDialog(
-            backgroundColor: AppColors.bgSecondary,
-            title: const Text(
-              'Tạo nhóm DM',
-              style: AppTextStyles.headerPrimary,
-            ),
-            content: SizedBox(
-              width: 400,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: groupNameController,
-                    style: AppTextStyles.textNormal,
-                    decoration: const InputDecoration(
-                      hintText: 'Tên nhóm (bắt buộc)',
-                      hintStyle: TextStyle(color: AppColors.textMuted),
-                      filled: true,
-                      fillColor: AppColors.inputBackground,
-                      border: OutlineInputBorder(
-                        borderSide: BorderSide.none,
-                        borderRadius: BorderRadius.all(Radius.circular(8)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (friends.isEmpty)
-                    const Text(
-                      'Chưa có bạn bè để thêm vào nhóm',
-                      style: AppTextStyles.textMuted,
-                    )
-                  else ...[
-                    Text(
-                      'Chọn thành viên:',
-                      style: AppTextStyles.textMuted.copyWith(fontSize: 12),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 200,
-                      child: ListView.builder(
-                        itemCount: friends.length,
-                        itemBuilder: (_, i) {
-                          final otherUserId =
-                              friends[i].otherUserId(currentUserId);
-                          return Consumer(
-                            builder: (_, ref, __) {
-                              final userAsync = ref.watch(
-                                userProfileProvider(otherUserId),
-                              );
-                              return userAsync.maybeWhen(
-                                data: (user) => CheckboxListTile(
-                                  value: selectedIds.contains(otherUserId),
-                                  activeColor: AppColors.brand,
-                                  title: Text(
-                                    user?.username ?? otherUserId,
-                                    style: AppTextStyles.textNormal,
-                                  ),
-                                  onChanged: (checked) {
-                                    setDialogState(() {
-                                      if (checked == true) {
-                                        selectedIds.add(otherUserId);
-                                      } else {
-                                        selectedIds.remove(otherUserId);
-                                      }
-                                    });
-                                  },
-                                ),
-                                orElse: () => const SizedBox.shrink(),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text(
-                  'Hủy',
-                  style: TextStyle(color: AppColors.textMuted),
-                ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brand,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: selectedIds.isEmpty ||
-                        groupNameController.text.trim().isEmpty
-                    ? null
-                    : () async {
-                        Navigator.of(ctx).pop();
-                        // Dùng dmNotifier đã cache, không dùng ref sau await
-                        final chat = await dmNotifier.createGroupDm(
-                          participantIds: selectedIds.toList(),
-                          name: groupNameController.text.trim(),
-                        );
-                        if (chat != null && context.mounted) {
-                          context.push(
-                            '${AppConstants.dmChatPath}/${chat.chatId}',
-                          );
-                        }
-                      },
-                child: const Text('Tạo nhóm'),
-              ),
-            ],
-          );
+      builder: (ctx) => CreateGroupDmDialog(
+        currentUserId: currentUserId,
+        onCreateSuccess: (chatId) {
+          if (context.mounted) {
+            context.push('${AppConstants.dmChatPath}/$chatId');
+          }
         },
       ),
     );
-
-    groupNameController.dispose();
   }
 }
+

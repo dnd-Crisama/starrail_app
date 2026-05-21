@@ -31,11 +31,13 @@ class DmRepositoryImpl implements DmRepository {
   Future<Either<Failure, DmChatEntity>> createGroupDm({
     required List<String> participantIds,
     required String name,
+    String? iconUrl,
   }) async {
     try {
       final model = await _datasource.createGroupDm(
         participantIds: participantIds,
         name: name,
+        iconUrl: iconUrl,
       );
       return Either.right(model.toEntity());
     } on ServerException catch (e) {
@@ -133,6 +135,40 @@ class DmRepositoryImpl implements DmRepository {
     try {
       final model = await _datasource.getDmChat(chatId);
       return Either.right(model.toEntity());
+    } on ServerException catch (e) {
+      return Either.left(ServerFailure(message: e.message));
+    } catch (e) {
+      return Either.left(UnknownFailure(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> deleteDmChat(String chatId) async {
+    try {
+      await _datasource.deleteDmChat(chatId);
+      return Either.right(null);
+    } on ServerException catch (e) {
+      return Either.left(ServerFailure(message: e.message));
+    } catch (e) {
+      return Either.left(UnknownFailure(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> updateGroupDm({
+    required String chatId,
+    required String name,
+    String? iconUrl,
+    List<String>? participantIds,
+  }) async {
+    try {
+      await _datasource.updateGroupDm(
+        chatId: chatId,
+        name: name,
+        iconUrl: iconUrl,
+        participantIds: participantIds,
+      );
+      return Either.right(null);
     } on ServerException catch (e) {
       return Either.left(ServerFailure(message: e.message));
     } catch (e) {

@@ -14,6 +14,7 @@ abstract class DmRepository {
   Future<Either<Failure, DmChatEntity>> createGroupDm({
     required List<String> participantIds,
     required String name,
+    String? iconUrl,
   });
 
   /// Stream danh sách cuộc hội thoại DM của currentUser, sắp xếp theo lastMessageAt.
@@ -44,4 +45,15 @@ abstract class DmRepository {
 
   /// Lấy thông tin một chat cụ thể.
   Future<Either<Failure, DmChatEntity>> getDmChat(String chatId);
+
+  /// Xóa cuộc hội thoại DM.
+  Future<Either<Failure, void>> deleteDmChat(String chatId);
+
+  /// Cập nhật thông tin Group DM.
+  Future<Either<Failure, void>> updateGroupDm({
+    required String chatId,
+    required String name,
+    String? iconUrl,
+    List<String>? participantIds,
+  });
 }
