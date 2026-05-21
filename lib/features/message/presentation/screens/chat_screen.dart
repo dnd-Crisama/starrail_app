@@ -144,6 +144,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     });
 
+    ref.listenManual(messageSearchTargetProvider, (previous, next) {
+      if (next != null && next.isNotEmpty) {
+        _navigateToSearchResult(next);
+      }
+    });
+
     // Lắng nghe vị trí scroll để hiện/ẩn nút "Jump to Present" + "New Messages" banner
     _scrollController.addListener(_onScroll);
 
@@ -428,6 +434,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
     );
+  }
+
+  Future<void> _navigateToSearchResult(String messageId) async {
+    _isNavigating = true;
+
+    for (var attempt = 0; attempt < 20; attempt++) {
+      if (_visibleMessages.any((m) => m.messageId == messageId)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToMessage(messageId);
+        });
+        ref.read(messageSearchTargetProvider.notifier).state = null;
+        return;
+      }
+
+      if (!_hasMoreMessages || _visibleMessages.isEmpty) break;
+      await _loadMoreMessages();
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      if (!mounted) return;
+    }
+
+    _isNavigating = false;
+    ref.read(messageSearchTargetProvider.notifier).state = null;
+    ref
+        .read(flashMessageProvider.notifier)
+        .showInfo('Không thể mở tin nhắn trong danh sách hiện tại');
   }
 
   /// Gửi tin nhắn — có thể kèm reply và attachments

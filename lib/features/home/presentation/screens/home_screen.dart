@@ -14,12 +14,15 @@ import '../../../server/presentation/providers/server_provider.dart';
 import '../../../server/presentation/providers/channel_provider.dart';
 import '../../../server/presentation/providers/role_provider.dart';
 import '../../../server/domain/entities/channel_entity.dart';
+import '../../../server/domain/entities/server_entity.dart';
 import '../../../server/domain/entities/permission.dart';
 import '../../../message/presentation/screens/chat_screen.dart';
+import '../../../message/presentation/widgets/message_search_dialog.dart';
 import '../../../friend/presentation/screens/dm_chat_screen.dart';
 import '../widgets/add_server_modal.dart';
 import '../widgets/current_user_panel.dart';
 import '../widgets/dm_sidebar_panel.dart';
+import '../widgets/server_icon_button.dart';
 import '../widgets/server_list_rail.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -32,6 +35,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen>
     with SingleTickerProviderStateMixin {
   bool _isDrawerOpen = false;
+  bool _isSelectingInitialChannel = false;
 
   void _openDrawer() {
     setState(() => _isDrawerOpen = true);
@@ -171,17 +175,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         children: [
           const SizedBox(height: 12),
           // DM button
-          _buildDiscordServerIcon(
+          ServerIconButton(
             isSelected: selectedServerId == null,
+            indicatorStyle: ServerIconIndicatorStyle.sidePill,
+            bottomPadding: 4,
             child: const Icon(
               Icons.chat_bubble_rounded,
               color: AppColors.white,
               size: 24,
             ),
             onTap: () {
+              setState(() => _isSelectingInitialChannel = false);
               ref.read(selectedServerIdProvider.notifier).state = null;
               ref.read(selectedServerNameProvider.notifier).state =
                   'Direct Messages';
+              ref.read(selectedChannelIdProvider.notifier).state = null;
               _closeDrawer();
             },
           ),
@@ -210,45 +218,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   itemBuilder: (context, index) {
                     final server = servers[index];
                     final isSelected = selectedServerId == server.serverId;
-                    return _buildDiscordServerIcon(
+                    return ServerIconButton(
                       isSelected: isSelected,
+                      indicatorStyle: ServerIconIndicatorStyle.sidePill,
+                      bottomPadding: 4,
                       hasUnread: _serverHasUnread(server.serverId),
                       child: server.iconUrl.isNotEmpty
-                          ? ClipOval(
-                              child: Image.network(
-                                server.iconUrl,
-                                width: 28,
-                                height: 28,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Text(
-                                  server.name.isNotEmpty
-                                      ? server.name[0].toUpperCase()
-                                      : '?',
-                                  style: AppTextStyles.headerSecondary.copyWith(
-                                    fontSize: 16,
-                                    color: AppColors.white,
-                                  ),
-                                ),
+                          ? Image.network(
+                              server.iconUrl,
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => ServerIconInitial(
+                                name: server.name,
+                                fontSize: 16,
                               ),
                             )
-                          : Text(
-                              server.name.isNotEmpty
-                                  ? server.name[0].toUpperCase()
-                                  : '?',
-                              style: AppTextStyles.headerSecondary.copyWith(
-                                fontSize: 16,
-                                color: AppColors.white,
-                              ),
-                            ),
+                          : ServerIconInitial(name: server.name, fontSize: 16),
                       onTap: () {
-                        ref.read(selectedServerIdProvider.notifier).state =
-                            server.serverId;
-                        ref.read(selectedServerNameProvider.notifier).state =
-                            server.name;
-                        // Load read status cho server khi chọn
-                        ref
-                            .read(unreadStatusNotifierProvider.notifier)
-                            .loadReadStatusForServer(server.serverId);
+                        _selectServerAndFirstVisibleChannel(server);
                         _closeDrawer();
                       },
                     );
@@ -273,8 +261,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             ),
           ),
           // Add server button
-          _buildDiscordServerIcon(
+          ServerIconButton(
             isSelected: false,
+            indicatorStyle: ServerIconIndicatorStyle.sidePill,
+            bottomPadding: 4,
             child: const Icon(Icons.add, color: AppColors.green, size: 24),
             onTap: () {
               _closeDrawer();
@@ -283,65 +273,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
           const SizedBox(height: 12),
         ],
-      ),
-    );
-  }
-
-  /// Discord-style server icon with left pill indicator
-  Widget _buildDiscordServerIcon({
-    required Widget child,
-    required bool isSelected,
-    required VoidCallback onTap,
-    bool hasUnread = false,
-  }) {
-    // Discord-style: pill indicator height dựa trên selected/unread
-    final double pillHeight;
-    final Color pillColor;
-    if (isSelected) {
-      pillHeight = 36;
-      pillColor = AppColors.white;
-    } else if (hasUnread) {
-      pillHeight = 8;
-      pillColor = AppColors.white;
-    } else {
-      pillHeight = 0;
-      pillColor = Colors.transparent;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const StadiumBorder(),
-        child: Row(
-          children: [
-            // Left pill indicator (Discord style)
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              width: pillHeight > 0 ? 4 : 0,
-              height: pillHeight > 0 ? pillHeight : 0,
-              margin: const EdgeInsets.only(right: 4),
-              decoration: BoxDecoration(
-                color: pillColor,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            // Server icon circle
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: isSelected ? AppColors.brand : AppColors.bgPrimary,
-                borderRadius: BorderRadius.circular(isSelected ? 16 : 24),
-              ),
-              alignment: Alignment.center,
-              child: child,
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -423,7 +354,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Widget _buildDesktopLayout(BuildContext context, WidgetRef ref) {
     return Row(
       children: [
-        ServerListRail(onAddServer: () => showAddServerModal(context)),
+        ServerListRail(
+          onAddServer: () => showAddServerModal(context),
+          onServerSelected: _selectServerAndFirstVisibleChannel,
+        ),
         _buildChannelSidebar(context, ref),
         Expanded(child: _buildMainContent(ref)),
       ],
@@ -436,6 +370,47 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     return ref.watch(serverHasUnreadProvider(serverId));
   }
 
+  Future<void> _selectServerAndFirstVisibleChannel(ServerEntity server) async {
+    ref.read(selectedServerIdProvider.notifier).state = server.serverId;
+    ref.read(selectedServerNameProvider.notifier).state = server.name;
+    ref.read(selectedDmChatIdProvider.notifier).state = null;
+    ref.read(selectedChannelIdProvider.notifier).state = null;
+    if (mounted) {
+      setState(() => _isSelectingInitialChannel = true);
+    }
+
+    ref
+        .read(unreadStatusNotifierProvider.notifier)
+        .loadReadStatusForServer(server.serverId);
+
+    ChannelEntity? firstChannel;
+    try {
+      final channels = await ref.read(
+        serverChannelsStreamProvider(server.serverId).future,
+      );
+      final visibleChannels = await _filterVisibleChannels(
+        server.serverId,
+        channels,
+      );
+      firstChannel = _firstVisibleChannelInSidebarOrder(visibleChannels);
+    } catch (_) {
+      firstChannel = null;
+    }
+
+    if (!mounted) return;
+    if (ref.read(selectedServerIdProvider) != server.serverId) return;
+    ref.read(selectedChannelIdProvider.notifier).state =
+        firstChannel?.channelId;
+    setState(() => _isSelectingInitialChannel = false);
+  }
+
+  ChannelEntity? _firstVisibleChannelInSidebarOrder(
+    List<ChannelEntity> channels,
+  ) {
+    final textChannels = channels.where((c) => c.type == ChannelType.text);
+    if (textChannels.isNotEmpty) return textChannels.first;
+    return channels.isEmpty ? null : channels.first;
+  }
 
   // ── CHANNEL SIDEBAR (Desktop) ────────────────────────────────
   Widget _buildChannelSidebar(BuildContext context, WidgetRef ref) {
@@ -814,7 +789,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     if (!canManageChannel) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Ban khong co quyen quan ly kenh nay'),
+          content: Text('Bạn không có quyền chỉnh sửa kênh này.'),
           backgroundColor: AppColors.red,
         ),
       );
@@ -831,7 +806,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ),
     );
   }
-
 
   Widget _buildMainContent(WidgetRef ref) {
     final channelInfo = ref.watch(selectedChannelInfoProvider);
@@ -887,25 +861,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   if (constraints.maxWidth < 400) {
                     return const SizedBox.shrink();
                   }
-                  return Container(
-                    width: 160,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: AppColors.bgTertiary,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    alignment: Alignment.centerLeft,
-                    child: const Row(
-                      children: [
-                        Icon(
-                          Icons.search,
-                          color: AppColors.textMuted,
-                          size: 14,
-                        ),
-                        SizedBox(width: 4),
-                        Text('Tìm kiếm', style: AppTextStyles.textMutedSmall),
-                      ],
+                  return InkWell(
+                    onTap: selectedChannelId == null || channelInfo == null
+                        ? null
+                        : () => showMessageSearchDialog(
+                            context: context,
+                            serverId: selectedServerId,
+                            channelId: selectedChannelId,
+                            channelName: channelDisplayName,
+                          ),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      width: 160,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: AppColors.bgTertiary,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      alignment: Alignment.centerLeft,
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.search,
+                            color: AppColors.textMuted,
+                            size: 14,
+                          ),
+                          SizedBox(width: 4),
+                          Text('Tìm kiếm', style: AppTextStyles.textMutedSmall),
+                        ],
+                      ),
                     ),
                   );
                 },
@@ -949,44 +934,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           chatId: selectedDmChatId,
         );
       }
-      // Chưa chọn chat → hiện placeholder gợi ý
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 80),
-            Container(
-              width: 68,
-              height: 68,
-              decoration: BoxDecoration(
-                color: AppColors.bgModifierHover,
-                borderRadius: BorderRadius.circular(34),
-              ),
-              child: const Icon(
-                Icons.chat_bubble_outline,
-                color: AppColors.channelDefault,
-                size: 36,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text('Tin nhắn trực tiếp', style: AppTextStyles.welcomeTitle),
-            const SizedBox(height: 8),
-            const Text(
-              'Chọn một cuộc trò chuyện để bắt đầu.',
-              style: AppTextStyles.welcomeSubtitle,
-            ),
-          ],
-        ),
+      return DmSidebarPanel(
+        selectedChatId: selectedDmChatId,
+        onChatSelected: (chatId) {
+          ref.read(selectedDmChatIdProvider.notifier).state = chatId;
+        },
       );
     }
 
-    // Chưa chọn kênh → welcome placeholder
     if (selectedChannelId == null || channelInfo == null) {
+      if (_isSelectingInitialChannel || selectedChannelId != null) {
+        return const Center(
+          child: CircularProgressIndicator(
+            color: AppColors.brand,
+            strokeWidth: 2,
+          ),
+        );
+      }
+
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 80),
             Container(
               width: 68,
               height: 68,
@@ -1001,15 +970,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               ),
             ),
             const SizedBox(height: 16),
-            Text(
-              'Chào mừng đến với $channelDisplayName!',
+            const Text(
+              'Không có kênh có thể truy cập',
               style: AppTextStyles.welcomeTitle,
             ),
             const SizedBox(height: 8),
-            Text(
-              channelTopic.isNotEmpty
-                  ? channelTopic
-                  : 'Chọn một kênh để bắt đầu trò chuyện.',
+            const Text(
+              'Bạn chưa có quyền xem kênh nào trong server này.',
               style: AppTextStyles.welcomeSubtitle,
             ),
           ],

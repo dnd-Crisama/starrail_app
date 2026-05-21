@@ -82,6 +82,9 @@ final replyingToProvider = StateProvider<MessageEntity?>((ref) => null);
 /// Tin nhắn đang được edit (null nếu không edit)
 final editingMessageProvider = StateProvider<MessageEntity?>((ref) => null);
 
+/// MessageId cần điều hướng tới từ kết quả tìm kiếm.
+final messageSearchTargetProvider = StateProvider<String?>((ref) => null);
+
 // ── Read Status — Discord-style Unread System ──────────────
 
 /// Lưu lastReadMessageId cho mỗi channel (để xác định tin nhắn chưa đọc)
