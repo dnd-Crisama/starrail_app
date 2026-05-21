@@ -77,7 +77,7 @@ class _DmChatScreenState extends ConsumerState<DmChatScreen> {
           if (messageState.error != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              color: AppColors.red.withOpacity(0.1),
+              color: AppColors.red.withValues(alpha: 0.1),
               child: Row(
                 children: [
                   const Icon(Icons.error_outline, color: AppColors.red, size: 16),
@@ -382,18 +382,10 @@ class _DmAppBar extends ConsumerWidget implements PreferredSizeWidget {
           }
           return Row(
             children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: AppColors.bgTertiary,
-                backgroundImage: user.avatarUrl.isNotEmpty
-                    ? NetworkImage(user.avatarUrl)
-                    : null,
-                child: user.avatarUrl.isEmpty
-                    ? Text(
-                        user.username[0].toUpperCase(),
-                        style: AppTextStyles.labelPrimary,
-                      )
-                    : null,
+              _AvatarWithStatus(
+                username: user.username,
+                avatarUrl: user.avatarUrl,
+                status: user.status,
               ),
               const SizedBox(width: 8),
               Column(
@@ -423,6 +415,69 @@ class _DmAppBar extends ConsumerWidget implements PreferredSizeWidget {
         return 'Không làm phiền';
       default:
         return 'Offline';
+    }
+  }
+}
+
+class _AvatarWithStatus extends StatelessWidget {
+  final String username;
+  final String avatarUrl;
+  final UserStatus status;
+
+  const _AvatarWithStatus({
+    required this.username,
+    required this.avatarUrl,
+    required this.status,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: AppColors.bgTertiary,
+            backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+            child: avatarUrl.isEmpty
+                ? Text(
+                    username.isNotEmpty ? username[0].toUpperCase() : '?',
+                    style: AppTextStyles.labelPrimary,
+                  )
+                : null,
+          ),
+          Positioned(
+            right: 1,
+            bottom: 1,
+            child: Container(
+              width: 11,
+              height: 11,
+              decoration: BoxDecoration(
+                color: _statusColor(status),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.bgSecondary, width: 2),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Color _statusColor(UserStatus status) {
+    switch (status) {
+      case UserStatus.online:
+        return AppColors.statusOnline;
+      case UserStatus.idle:
+        return AppColors.statusIdle;
+      case UserStatus.dnd:
+        return AppColors.statusDnd;
+      case UserStatus.invisible:
+      case UserStatus.offline:
+        return AppColors.statusOffline;
     }
   }
 }

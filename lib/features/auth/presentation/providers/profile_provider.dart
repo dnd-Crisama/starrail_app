@@ -1,8 +1,7 @@
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../../core/errors/failures.dart';
-import '../../../../core/usecases/usecase.dart';
+import 'package:firebase_database/firebase_database.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/user_repository.dart';
 import '../../domain/usecases/update_profile_usecase.dart';
@@ -10,11 +9,16 @@ import '../../domain/usecases/update_status_usecase.dart';
 import '../../data/datasources/user_remote_datasource.dart';
 import '../../data/datasources/cloudinary_storage_datasource.dart';
 import '../../data/datasources/storage_remote_datasource.dart';
+import '../../data/datasources/presence_remote_datasource.dart';
 import '../../data/repositories/user_repository_impl.dart';
 import 'auth_provider.dart';
 
 final _storageDatasourceProvider = Provider<StorageRemoteDatasource>((ref) {
   return CloudinaryStorageDatasource();
+});
+
+final _presenceDatasourceProvider = Provider<PresenceRemoteDatasource>((ref) {
+  return PresenceRemoteDatasourceImpl(database: FirebaseDatabase.instance);
 });
 
 final _userRepoProvider = Provider<UserRepository>((ref) {
@@ -26,6 +30,7 @@ final _userRepoProvider = Provider<UserRepository>((ref) {
       firestore: FirebaseFirestore.instance,
     ),
     storageRemoteDatasource: ref.watch(_storageDatasourceProvider),
+    presenceRemoteDatasource: ref.watch(_presenceDatasourceProvider),
     currentUserId: currentUserId ?? '',
   );
 });

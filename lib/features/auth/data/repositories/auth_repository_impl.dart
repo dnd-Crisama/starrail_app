@@ -1,19 +1,23 @@
-import 'package:firebase_auth/firebase_auth.dart' hide AuthException;
+import 'dart:async';
+
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/errors/failures.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_remote_datasource.dart';
+import '../datasources/presence_remote_datasource.dart';
 import '../datasources/user_remote_datasource.dart';
 import '../models/user_model.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final AuthRemoteDatasource authRemoteDatasource;
   final UserRemoteDatasource userRemoteDatasource;
+  final PresenceRemoteDatasource presenceRemoteDatasource;
 
   AuthRepositoryImpl({
     required this.authRemoteDatasource,
     required this.userRemoteDatasource,
+    required this.presenceRemoteDatasource,
   });
 
   @override
@@ -34,6 +38,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
       // 3. Cập nhật trạng thái Online
       await userRemoteDatasource.updateStatus(uid, 'ONLINE');
+      _updateRealtimePresenceBestEffort(uid, 'ONLINE');
 
       return userModel.toEntity().copyWith(status: UserStatus.online);
     } on AuthException catch (e) {
@@ -81,6 +86,7 @@ class AuthRepositoryImpl implements AuthRepository {
       );
 
       await userRemoteDatasource.createUserDocument(newUser);
+      _updateRealtimePresenceBestEffort(uid, 'ONLINE');
 
       return newUser.toEntity().copyWith(status: UserStatus.online);
     } on AuthException catch (e) {
@@ -116,6 +122,7 @@ class AuthRepositoryImpl implements AuthRepository {
       );
 
       await userRemoteDatasource.createUserDocument(newUser);
+      _updateRealtimePresenceBestEffort(firebaseUser.uid, 'ONLINE');
       return newUser.toEntity().copyWith(status: UserStatus.online);
     } on ServerException catch (e) {
       throw ServerFailure(message: e.message);
@@ -126,18 +133,17 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> logout() async {
-    try {
-      final firebaseUser = await authRemoteDatasource.getCurrentFirebaseUser();
-      if (firebaseUser != null) {
+    final firebaseUser = await authRemoteDatasource.getCurrentFirebaseUser();
+    if (firebaseUser != null) {
         // Cập nhật offline trước khi cắt kết nối
-        await userRemoteDatasource.updateStatus(firebaseUser.uid, 'OFFLINE');
-      }
-      await authRemoteDatasource.signOut();
-    } catch (e) {
-      // Dù lỗi vẫn cố sign out để user không bị kẹt
-      await authRemoteDatasource.signOut();
-      throw ServerFailure(message: e.toString());
+      await userRemoteDatasource
+          .updateStatus(firebaseUser.uid, 'OFFLINE')
+          .timeout(const Duration(seconds: 5))
+          .catchError((_) {});
+      _updateRealtimePresenceBestEffort(firebaseUser.uid, 'OFFLINE');
     }
+    await authRemoteDatasource.signOut();
+      // Dù lỗi vẫn cố sign out để user không bị kẹt
   }
 
   @override
@@ -151,7 +157,14 @@ class AuthRepositoryImpl implements AuthRepository {
       final userModel = await userRemoteDatasource.getUserData(
         firebaseUser.uid,
       );
-      return userModel.toEntity();
+      final user = userModel.toEntity();
+      if (user.status != UserStatus.invisible && user.status != UserStatus.dnd) {
+        await userRemoteDatasource.updateStatus(firebaseUser.uid, 'ONLINE');
+        _updateRealtimePresenceBestEffort(firebaseUser.uid, 'ONLINE');
+        return user.copyWith(status: UserStatus.online);
+      }
+
+      return user;
     } on CacheException {
       rethrow; // Ném lỗi lên trên để router biết là chưa có profile
     } catch (e) {
@@ -166,5 +179,14 @@ class AuthRepositoryImpl implements AuthRepository {
     } catch (e) {
       throw ServerFailure(message: e.toString());
     }
+  }
+
+  void _updateRealtimePresenceBestEffort(String uid, String status) {
+    unawaited(
+      presenceRemoteDatasource
+          .updatePresenceStatus(uid, status)
+          .timeout(const Duration(seconds: 3))
+          .catchError((_) {}),
+    );
   }
 }

@@ -21,6 +21,7 @@ abstract class ServerRemoteDatasource {
 
   Future<ServerModel> getServer({required String serverId});
 
+  /// Kiểm tra user có phải member của server.
   Future<bool> isServerMember({
     required String serverId,
     required String userId,
@@ -28,6 +29,11 @@ abstract class ServerRemoteDatasource {
 
   /// Sinh invite code duy nhất.
   Future<String> generateUniqueInviteCode();
+
+  /// Lắng nghe danh sách thành viên của một server
+  Stream<List<ServerMemberModel>> watchServerMembers({
+    required String serverId,
+  });
 }
 
 class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
@@ -451,5 +457,23 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
     } while (!isUnique);
 
     return code;
+  }
+
+  @override
+  Stream<List<ServerMemberModel>> watchServerMembers({
+    required String serverId,
+  }) {
+    return firestore
+        .collection('servers')
+        .doc(serverId)
+        .collection('members')
+        // Order by joinedAt to keep it consistent
+        .orderBy('joinedAt')
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => ServerMemberModel.fromFirestore(doc.data(), doc.id, serverId))
+          .toList();
+    });
   }
 }

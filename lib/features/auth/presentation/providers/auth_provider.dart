@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/usecases/usecase.dart';
@@ -10,6 +11,7 @@ import '../../domain/usecases/login_usecase.dart';
 import '../../domain/usecases/logout_usecase.dart';
 import '../../domain/usecases/register_usecase.dart';
 import '../../data/datasources/auth_remote_datasource.dart';
+import '../../data/datasources/presence_remote_datasource.dart';
 import '../../data/datasources/user_remote_datasource.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 
@@ -23,10 +25,17 @@ final _userRemoteDatasourceProvider = Provider<UserRemoteDatasource>((ref) {
   return UserRemoteDatasourceImpl(firestore: FirebaseFirestore.instance);
 });
 
+final _presenceRemoteDatasourceProvider = Provider<PresenceRemoteDatasource>((
+  ref,
+) {
+  return PresenceRemoteDatasourceImpl(database: FirebaseDatabase.instance);
+});
+
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepositoryImpl(
     authRemoteDatasource: ref.watch(_authRemoteDatasourceProvider),
     userRemoteDatasource: ref.watch(_userRemoteDatasourceProvider),
+    presenceRemoteDatasource: ref.watch(_presenceRemoteDatasourceProvider),
   );
 });
 

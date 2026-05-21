@@ -4,6 +4,7 @@ import '../../../../core/errors/failures.dart';
 import '../../domain/entities/server_entity.dart';
 import '../../domain/repositories/server_repository.dart';
 import '../datasources/server_remote_datasource.dart';
+import '../../domain/entities/server_member_entity.dart';
 
 class ServerRepositoryImpl implements ServerRepository {
   final ServerRemoteDatasource serverRemoteDatasource;
@@ -106,5 +107,14 @@ class ServerRepositoryImpl implements ServerRepository {
     } on ServerException {
       return false;
     }
+  }
+
+  @override
+  Stream<List<ServerMemberEntity>> watchServerMembers({
+    required String serverId,
+  }) {
+    return serverRemoteDatasource
+        .watchServerMembers(serverId: serverId)
+        .map((models) => models.map((m) => m.toEntity()).toList());
   }
 }

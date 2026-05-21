@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../friend/presentation/providers/dm_provider.dart';
 import '../../../friend/presentation/providers/friend_provider.dart';
@@ -353,20 +354,10 @@ class _DmChatSidebarTile extends ConsumerWidget {
     return userAsync.maybeWhen(
       data: (user) => _buildTile(
         context,
-        leading: CircleAvatar(
-          radius: 16,
-          backgroundColor: AppColors.bgTertiary,
-          backgroundImage: user != null && user.avatarUrl.isNotEmpty
-              ? NetworkImage(user.avatarUrl)
-              : null,
-          child: user == null || user.avatarUrl.isEmpty
-              ? Text(
-                  (user?.username ?? otherUserId).isNotEmpty
-                      ? (user?.username ?? otherUserId)[0].toUpperCase()
-                      : '?',
-                  style: AppTextStyles.labelPrimary.copyWith(fontSize: 12),
-                )
-              : null,
+        leading: _AvatarWithStatus(
+          username: user?.username ?? otherUserId,
+          avatarUrl: user?.avatarUrl ?? '',
+          status: user?.status ?? UserStatus.offline,
         ),
         title: user?.username ?? otherUserId,
         subtitle: chat.lastMessagePreview,
@@ -431,5 +422,68 @@ class _DmChatSidebarTile extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+class _AvatarWithStatus extends StatelessWidget {
+  final String username;
+  final String avatarUrl;
+  final UserStatus status;
+
+  const _AvatarWithStatus({
+    required this.username,
+    required this.avatarUrl,
+    required this.status,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: AppColors.bgTertiary,
+            backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+            child: avatarUrl.isEmpty
+                ? Text(
+                    username.isNotEmpty ? username[0].toUpperCase() : '?',
+                    style: AppTextStyles.labelPrimary.copyWith(fontSize: 12),
+                  )
+                : null,
+          ),
+          Positioned(
+            right: 1,
+            bottom: 1,
+            child: Container(
+              width: 11,
+              height: 11,
+              decoration: BoxDecoration(
+                color: _statusColor(status),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.bgSecondary, width: 2),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Color _statusColor(UserStatus status) {
+    switch (status) {
+      case UserStatus.online:
+        return AppColors.statusOnline;
+      case UserStatus.idle:
+        return AppColors.statusIdle;
+      case UserStatus.dnd:
+        return AppColors.statusDnd;
+      case UserStatus.invisible:
+      case UserStatus.offline:
+        return AppColors.statusOffline;
+    }
   }
 }
