@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/utils/logger.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/profile_provider.dart';
 import '../../../auth/domain/entities/user_entity.dart';
@@ -24,16 +24,11 @@ import '../../../server/domain/entities/server_entity.dart';
 import '../../../server/domain/entities/permission.dart';
 import '../../../message/presentation/screens/chat_screen.dart';
 import '../../../message/presentation/widgets/message_search_dialog.dart';
-import '../../../friend/presentation/screens/dm_list_screen.dart';
 import '../../../friend/presentation/screens/dm_chat_screen.dart';
-import '../../../friend/presentation/providers/dm_provider.dart';
-import '../../../friend/presentation/providers/friend_provider.dart';
-import '../../../server/presentation/widgets/server_member_list_panel.dart';
 import '../../../server/presentation/widgets/collapsible_server_member_list.dart';
 import '../../../server/presentation/widgets/full_screen_member_list.dart';
 import '../../../../core/router/slide_from_right_route.dart';
 import '../widgets/add_server_modal.dart';
-import '../widgets/current_user_panel.dart';
 import '../widgets/dm_sidebar_panel.dart';
 import '../widgets/server_icon_button.dart';
 import '../widgets/server_list_rail.dart';
@@ -152,7 +147,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         ),
 
         // Custom Discord-style drawer overlay
-        if (_isDrawerOpen) _buildDrawerOverlay(context),
+        _buildDrawerOverlay(context),
       ],
     );
   }
@@ -160,21 +155,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Widget _buildDrawerOverlay(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
 
-    return GestureDetector(
-      onTap: _closeDrawer,
-      child: Container(
-        color: AppColors.scrim,
-        child: GestureDetector(
-          onTap: () {}, // Prevent tap from closing when inside drawer
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              width: screenWidth,
-              color: AppColors.bgTertiary,
-              child: _buildDrawerContent(context),
+    return IgnorePointer(
+      ignoring: !_isDrawerOpen,
+      child: Stack(
+        children: [
+          AnimatedOpacity(
+            opacity: _isDrawerOpen ? 1 : 0,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+            child: GestureDetector(
+              onTap: _closeDrawer,
+              child: Container(color: AppColors.scrim),
             ),
           ),
-        ),
+          AnimatedSlide(
+            offset: _isDrawerOpen ? Offset.zero : const Offset(-1, 0),
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutCubic,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: GestureDetector(
+                onTap: () {},
+                child: Container(
+                  width: screenWidth,
+                  color: AppColors.bgTertiary,
+                  child: _buildDrawerContent(context),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -584,132 +594,50 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  // ── SERVER LIST (Desktop) ────────────────────────────────────
-  Widget _buildServerList(BuildContext context, WidgetRef ref) {
-    final serverListState = ref.watch(userServersStreamProvider);
-    final selectedServerId = ref.watch(selectedServerIdProvider);
-
-    return Container(
-      width: AppConstants.serverListWidth,
-      color: AppColors.bgTertiary,
-      child: Column(
-        children: [
-          const SizedBox(height: 12),
-
-          _buildServerIconButton(
-            isSelected: selectedServerId == null,
-            tooltip: 'Direct Messages',
-            child: const Icon(
-              Icons.chat_bubble_rounded,
-              color: AppColors.white,
-              size: 28,
-            ),
-            onTap: () {
-              ref.read(selectedServerIdProvider.notifier).state = null;
-              ref.read(selectedServerNameProvider.notifier).state =
-                  'Direct Messages';
-            },
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: 32,
-            height: 2,
-            decoration: BoxDecoration(
-              color: AppColors.divider,
-              borderRadius: BorderRadius.circular(1),
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          Expanded(
-            child: serverListState.when(
-              data: (servers) {
-                if (servers.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-
-                return ListView.builder(
-                  itemCount: servers.length,
-                  itemBuilder: (context, index) {
-                    final server = servers[index];
-                    final isSelected = selectedServerId == server.serverId;
-
-                    return _buildServerIconButton(
-                      tooltip: server.name,
-                      child: server.iconUrl.isNotEmpty
-                          ? ClipOval(
-                              child: Image.network(
-                                server.iconUrl,
-                                width: 28,
-                                height: 28,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Text(
-                                  server.name.isNotEmpty
-                                      ? server.name[0].toUpperCase()
-                                      : '?',
-                                  style: AppTextStyles.headerSecondary.copyWith(
-                                    fontSize: 18,
-                                    color: AppColors.white,
-                                  ),
-                                ),
-                              ),
-                            )
-                          : Text(
-                              server.name.isNotEmpty
-                                  ? server.name[0].toUpperCase()
-                                  : '?',
-                              style: AppTextStyles.headerSecondary.copyWith(
-                                fontSize: 18,
-                                color: AppColors.white,
-                              ),
-                            ),
-                      isSelected: isSelected,
-                      hasIndicator: _serverHasUnread(server.serverId),
-                      onTap: () {
-                        ref.read(selectedServerIdProvider.notifier).state =
-                            server.serverId;
-                        ref.read(selectedServerNameProvider.notifier).state =
-                            server.name;
-                        // Load read status cho server khi chọn
-                        ref
-                            .read(unreadStatusNotifierProvider.notifier)
-                            .loadReadStatusForServer(server.serverId);
-                      },
-                    );
-                  },
-                );
-              },
-              loading: () => const Center(
-                child: CircularProgressIndicator(color: AppColors.brand),
-              ),
-              error: (err, stack) {
-                Logger.error(
-                  'Firebase load servers error: $err',
-                  tag: 'HomeScreen',
-                );
-                return Tooltip(
-                  message: err.toString(),
-                  child: const Icon(Icons.error_outline, color: AppColors.red),
-                );
-              },
-            ),
-          ),
-
-          _buildServerIconButton(
-            tooltip: 'Thêm server',
-            child: const Icon(Icons.add, color: AppColors.green, size: 20),
-            onTap: () => _showAddServerModal(context),
-          ),
-          const SizedBox(height: 12),
-        ],
-      ),
-    );
-  }
-
-  /// Kiểm tra server có channel nào chưa đọc — cho server icon indicator
-  /// Sử dụng reactive provider để tự cập nhật khi read status thay đổi
+  // ── Channel visibility helpers ───────────────────────────────
   bool _serverHasUnread(String serverId) {
     return ref.watch(serverHasUnreadProvider(serverId));
+  }
+
+  Future<List<ChannelEntity>> _filterVisibleChannels(
+    String serverId,
+    List<ChannelEntity> channels,
+  ) async {
+    final currentUser = ref.read(authNotifierProvider).user;
+    if (currentUser == null) return [];
+
+    final isOwner = ref.read(isServerOwnerProvider(serverId));
+    if (isOwner) return channels;
+
+    final canViewServer = await ref.read(
+      hasPermissionProvider((
+        serverId: serverId,
+        userId: currentUser.uid,
+        permission: Permission.viewChannel,
+      )).future,
+    );
+    if (!canViewServer) return [];
+
+    final hasChannelOverrides = channels.any(
+      (channel) => channel.allowedViewRoleIds.isNotEmpty,
+    );
+    if (!hasChannelOverrides) return channels;
+
+    final memberDoc = await FirebaseFirestore.instance
+        .collection('servers')
+        .doc(serverId)
+        .collection('members')
+        .doc(currentUser.uid)
+        .get();
+    final roleIds = List<String>.from(
+      memberDoc.data()?['roleIds'] as List? ?? const [],
+    );
+
+    return channels.where((channel) {
+      final allowedRoleIds = channel.allowedViewRoleIds;
+      if (allowedRoleIds.isEmpty) return true;
+      return roleIds.any(allowedRoleIds.contains);
+    }).toList();
   }
 
   Future<void> _selectServerAndFirstVisibleChannel(ServerEntity server) async {
@@ -752,47 +680,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final textChannels = channels.where((c) => c.type == ChannelType.text);
     if (textChannels.isNotEmpty) return textChannels.first;
     return channels.isEmpty ? null : channels.first;
-  }
-
-  Widget _buildServerIconButton({
-    required Widget child,
-    required VoidCallback onTap,
-    String? tooltip,
-    bool isSelected = false,
-    bool hasIndicator = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        children: [
-          InkWell(
-            onTap: onTap,
-            customBorder: const CircleBorder(),
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: isSelected ? AppColors.brand : AppColors.bgPrimary,
-                borderRadius: BorderRadius.circular(isSelected ? 16 : 24),
-              ),
-              alignment: Alignment.center,
-              child: child,
-            ),
-          ),
-          if (hasIndicator) ...[
-            const SizedBox(height: 4),
-            Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: AppColors.white,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
   }
 
   // ── CHANNEL SIDEBAR (Desktop) ────────────────────────────────
@@ -1036,7 +923,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     if (selectedServerId == null) {
       // Direct Messages mode — hiển thị DmListScreen thực
       final selectedDmChatId = ref.watch(selectedDmChatIdProvider);
-      return _DmSidebarPanel(
+      return DmSidebarPanel(
         selectedChatId: selectedDmChatId,
         onChatSelected: (chatId) {
           ref.read(selectedDmChatIdProvider.notifier).state = chatId;
@@ -1984,496 +1871,4 @@ void _showAddServerModal(BuildContext context) {
       );
     },
   );
-}
-
-// ════════════════════════════════════════════════════════════════
-//  _DmSidebarPanel — Sidebar panel cho chế độ Direct Messages
-// ════════════════════════════════════════════════════════════════
-
-/// Sidebar hiển thị danh sách DM chats và nút tạo Group DM.
-/// Được nhúng trực tiếp vào HomeScreen (không dùng router riêng).
-class _DmSidebarPanel extends ConsumerWidget {
-  final String? selectedChatId;
-  final ValueChanged<String> onChatSelected;
-
-  const _DmSidebarPanel({
-    required this.selectedChatId,
-    required this.onChatSelected,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final currentUserId = ref.watch(authNotifierProvider).user?.uid ?? '';
-    final chatsAsync = ref.watch(dmChatsStreamProvider);
-
-    return Column(
-      children: [
-        // Nút điều hướng sang trang Bạn bè
-        _buildFriendsNavButton(context),
-        const Divider(color: AppColors.divider, height: 1),
-        // Header TIN NHẮN TRỰC TIẾP
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'TIN NHẮN TRỰC TIẾP',
-                  style: AppTextStyles.textMuted.copyWith(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-              Tooltip(
-                message: 'Tạo nhóm DM',
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(4),
-                  onTap: () => _showCreateGroupDmDialog(
-                    context,
-                    ref,
-                    currentUserId,
-                    onChatSelected,
-                  ),
-                  child: const Icon(
-                    Icons.add,
-                    color: AppColors.textMuted,
-                    size: 18,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const Divider(color: AppColors.divider, height: 1),
-        // Danh sách chats
-        Expanded(
-          child: chatsAsync.when(
-            loading: () =>
-                const SizedBox.shrink(), // Không hiển thị gì khi đang load
-            error: (e, _) =>
-                Center(child: Text('$e', style: AppTextStyles.textMuted)),
-            data: (chats) {
-              if (chats.isEmpty) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.chat_bubble_outline,
-                          size: 36,
-                          color: AppColors.textMuted,
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Chưa có cuộc trò chuyện',
-                          style: AppTextStyles.textMuted,
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }
-
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                itemCount: chats.length,
-                itemBuilder: (_, i) {
-                  final chat = chats[i];
-                  final isSelected = selectedChatId == chat.chatId;
-                  return _DmChatSidebarTile(
-                    chat: chat,
-                    currentUserId: currentUserId,
-                    isSelected: isSelected,
-                    onTap: () => onChatSelected(chat.chatId),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFriendsNavButton(BuildContext context) {
-    return Column(
-      children: [
-        // Nút Bạn bè
-        _buildNavItem(
-          context,
-          icon: Icons.people_outline,
-          label: 'Bạn bè',
-          onTap: () => context.push(AppConstants.friendsPath),
-        ),
-        // Nút Thêm bạn
-        _buildNavItem(
-          context,
-          icon: Icons.person_add_outlined,
-          label: 'Thêm bạn',
-          isHighlight: true,
-          onTap: () => context.push(AppConstants.addFriendPath),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNavItem(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    bool isHighlight = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(4),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(4),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 20,
-                  color: isHighlight
-                      ? AppColors.green
-                      : AppColors.channelDefault,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: AppTextStyles.channelName.copyWith(
-                    color: isHighlight ? AppColors.green : null,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showCreateGroupDmDialog(
-    BuildContext context,
-    WidgetRef ref,
-    String currentUserId,
-    ValueChanged<String> onChatSelectedCallback,
-  ) async {
-    final groupNameController = TextEditingController();
-    final friendsAsync = ref.read(friendsStreamProvider);
-
-    final friends = friendsAsync.maybeWhen(
-      data: (list) => list,
-      orElse: () => [],
-    );
-
-    final selectedIds = <String>{};
-    final dmNotifier = ref.read(dmChatNotifierProvider.notifier);
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          return AlertDialog(
-            backgroundColor: AppColors.bgSecondary,
-            title: const Text(
-              'Tạo nhóm DM',
-              style: AppTextStyles.headerPrimary,
-            ),
-            content: SizedBox(
-              width: 400,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: groupNameController,
-                    style: AppTextStyles.textNormal,
-                    decoration: const InputDecoration(
-                      hintText: 'Tên nhóm (bắt buộc)',
-                      hintStyle: TextStyle(color: AppColors.textMuted),
-                      filled: true,
-                      fillColor: AppColors.inputBackground,
-                      border: OutlineInputBorder(
-                        borderSide: BorderSide.none,
-                        borderRadius: BorderRadius.all(Radius.circular(8)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (friends.isEmpty)
-                    const Text(
-                      'Chưa có bạn bè để thêm vào nhóm',
-                      style: AppTextStyles.textMuted,
-                    )
-                  else ...[
-                    Text(
-                      'Chọn thành viên:',
-                      style: AppTextStyles.textMuted.copyWith(fontSize: 12),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 200,
-                      child: ListView.builder(
-                        itemCount: friends.length,
-                        itemBuilder: (_, i) {
-                          final otherUserId = friends[i].otherUserId(
-                            currentUserId,
-                          );
-                          return Consumer(
-                            builder: (_, ref, __) {
-                              final userAsync = ref.watch(
-                                userProfileProvider(otherUserId),
-                              );
-                              return userAsync.maybeWhen(
-                                data: (user) => CheckboxListTile(
-                                  value: selectedIds.contains(otherUserId),
-                                  activeColor: AppColors.brand,
-                                  title: Text(
-                                    user?.username ?? otherUserId,
-                                    style: AppTextStyles.textNormal,
-                                  ),
-                                  onChanged: (checked) {
-                                    setDialogState(() {
-                                      if (checked == true) {
-                                        selectedIds.add(otherUserId);
-                                      } else {
-                                        selectedIds.remove(otherUserId);
-                                      }
-                                    });
-                                  },
-                                ),
-                                orElse: () => const SizedBox.shrink(),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text(
-                  'Hủy',
-                  style: TextStyle(color: AppColors.textMuted),
-                ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brand,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed:
-                    selectedIds.isEmpty ||
-                        groupNameController.text.trim().isEmpty
-                    ? null
-                    : () async {
-                        Navigator.of(ctx).pop();
-                        final chat = await dmNotifier.createGroupDm(
-                          participantIds: selectedIds.toList(),
-                          name: groupNameController.text.trim(),
-                        );
-                        if (chat != null && context.mounted) {
-                          onChatSelectedCallback(chat.chatId);
-                        }
-                      },
-                child: const Text('Tạo nhóm'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    groupNameController.dispose();
-  }
-}
-
-/// Tile hiển thị một DM chat trong sidebar của HomeScreen.
-class _DmChatSidebarTile extends ConsumerWidget {
-  final dynamic chat; // DmChatEntity
-  final String currentUserId;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _DmChatSidebarTile({
-    required this.chat,
-    required this.currentUserId,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Group DM: hiện icon nhóm + tên nhóm
-    if (chat.isGroupDm) {
-      return _buildTile(
-        context,
-        leading: CircleAvatar(
-          radius: 16,
-          backgroundColor: AppColors.bgTertiary,
-          backgroundImage: chat.iconUrl != null && chat.iconUrl!.isNotEmpty
-              ? NetworkImage(chat.iconUrl!)
-              : null,
-          child: chat.iconUrl == null || chat.iconUrl!.isEmpty
-              ? const Icon(Icons.group, size: 16, color: AppColors.textMuted)
-              : null,
-        ),
-        title: chat.name.isNotEmpty ? chat.name : 'Nhóm DM',
-        subtitle: chat.lastMessagePreview,
-      );
-    }
-
-    // DM 1-1: load thông tin người kia
-    final otherUserId = chat.otherParticipantId(currentUserId);
-    final userAsync = ref.watch(userProfileProvider(otherUserId));
-
-    return userAsync.maybeWhen(
-      data: (user) => _buildTile(
-        context,
-        leading: _DmAvatarWithStatus(
-          username: user?.username ?? otherUserId,
-          avatarUrl: user?.avatarUrl ?? '',
-          status: user?.status ?? UserStatus.offline,
-        ),
-        title: user?.username ?? otherUserId,
-        subtitle: chat.lastMessagePreview,
-      ),
-      orElse: () => _buildTile(
-        context,
-        leading: const CircleAvatar(
-          radius: 16,
-          backgroundColor: AppColors.bgTertiary,
-        ),
-        title: otherUserId,
-        subtitle: '',
-      ),
-    );
-  }
-
-  Widget _buildTile(
-    BuildContext context, {
-    required Widget leading,
-    required String title,
-    required String subtitle,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-      child: Material(
-        color: isSelected ? AppColors.bgModifierSelected : Colors.transparent,
-        borderRadius: BorderRadius.circular(4),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(4),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(
-              children: [
-                leading,
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: isSelected
-                            ? AppTextStyles.channelNameSelected
-                            : AppTextStyles.channelName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (subtitle.isNotEmpty)
-                        Text(
-                          subtitle,
-                          style: AppTextStyles.textMuted.copyWith(fontSize: 11),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DmAvatarWithStatus extends StatelessWidget {
-  final String username;
-  final String avatarUrl;
-  final UserStatus status;
-
-  const _DmAvatarWithStatus({
-    required this.username,
-    required this.avatarUrl,
-    required this.status,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 36,
-      height: 36,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: AppColors.bgTertiary,
-            backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-            child: avatarUrl.isEmpty
-                ? Text(
-                    username.isNotEmpty ? username[0].toUpperCase() : '?',
-                    style: AppTextStyles.labelPrimary.copyWith(fontSize: 12),
-                  )
-                : null,
-          ),
-          Positioned(
-            right: 1,
-            bottom: 1,
-            child: Container(
-              width: 11,
-              height: 11,
-              decoration: BoxDecoration(
-                color: _statusColor(status),
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.bgSecondary, width: 2),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static Color _statusColor(UserStatus status) {
-    switch (status) {
-      case UserStatus.online:
-        return AppColors.statusOnline;
-      case UserStatus.idle:
-        return AppColors.statusIdle;
-      case UserStatus.dnd:
-        return AppColors.statusDnd;
-      case UserStatus.invisible:
-      case UserStatus.offline:
-        return AppColors.statusOffline;
-    }
-  }
 }

@@ -396,16 +396,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return _messageKeys.putIfAbsent(messageId, () => GlobalKey());
   }
 
+  void _jumpNearMessageIndex(int targetIndex) {
+    if (!_scrollController.hasClients || _visibleMessages.isEmpty) return;
+
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    if (maxScroll <= 0) return;
+
+    final ratio = _visibleMessages.length == 1
+        ? 0.0
+        : targetIndex / (_visibleMessages.length - 1);
+    final estimatedOffset = maxScroll * ratio;
+    _scrollController.jumpTo(
+      estimatedOffset.clamp(0.0, maxScroll).toDouble(),
+    );
+  }
+
   /// Cuộn đến tin nhắn theo ID (dùng khi click reply preview)
   /// Sử dụng GlobalKey + Scrollable.ensureVisible để scroll chính xác
-  void _scrollToMessage(String messageId) {
+  void _scrollToMessage(String messageId, {bool allowEstimatedJump = true}) {
     final key = _messageKeys[messageId];
     if (key?.currentContext == null) {
-      // Key chưa mount — thử tìm trong visible messages và đợi frame tiếp theo
-      final exists = _visibleMessages.any((m) => m.messageId == messageId);
-      if (!exists) return;
+      final targetIndex = _visibleMessages.indexWhere(
+        (m) => m.messageId == messageId,
+      );
+      if (targetIndex < 0) return;
+
+      if (allowEstimatedJump) {
+        _jumpNearMessageIndex(targetIndex);
+      }
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToMessage(messageId);
+        if (!mounted) return;
+        final hasContext = _messageKeys[messageId]?.currentContext != null;
+        if (hasContext || allowEstimatedJump) {
+          _scrollToMessage(messageId, allowEstimatedJump: false);
+        }
       });
       return;
     }
@@ -442,6 +467,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     for (var attempt = 0; attempt < 20; attempt++) {
       if (_visibleMessages.any((m) => m.messageId == messageId)) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          final targetIndex = _visibleMessages.indexWhere(
+            (m) => m.messageId == messageId,
+          );
+          if (targetIndex >= 0) {
+            _jumpNearMessageIndex(targetIndex);
+          }
           _scrollToMessage(messageId);
         });
         ref.read(messageSearchTargetProvider.notifier).state = null;
@@ -1200,13 +1231,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Phase 1: Ước lượng vị trí scroll và nhảy đến đó
     // Điều này đảm bảo ListView xây dựng target message trong viewport
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-      final estimatedRatio = targetIndex / _visibleMessages.length;
-      final estimatedOffset =
-          _scrollController.position.maxScrollExtent * estimatedRatio;
-      _scrollController.jumpTo(
-        estimatedOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-      );
+      _jumpNearMessageIndex(targetIndex);
 
       // Phase 2: Sau khi target message được xây dựng, cuộn chính xác với ensureVisible
       WidgetsBinding.instance.addPostFrameCallback((_) {

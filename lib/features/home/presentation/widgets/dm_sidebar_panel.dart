@@ -36,7 +36,7 @@ class DmSidebarPanel extends ConsumerWidget {
             children: [
               Expanded(
                 child: Text(
-                  'TIN NHAN TRUC TIEP',
+                  'TIN NHẮN RIÊNG',
                   style: AppTextStyles.textMuted.copyWith(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -45,7 +45,7 @@ class DmSidebarPanel extends ConsumerWidget {
                 ),
               ),
               Tooltip(
-                message: 'Tao nhom DM',
+                message: 'Tạo nhóm DM',
                 child: InkWell(
                   borderRadius: BorderRadius.circular(4),
                   onTap: () => _showCreateGroupDmDialog(
@@ -68,9 +68,8 @@ class DmSidebarPanel extends ConsumerWidget {
         Expanded(
           child: chatsAsync.when(
             loading: () => const SizedBox.shrink(),
-            error: (e, _) => Center(
-              child: Text('$e', style: AppTextStyles.textMuted),
-            ),
+            error: (e, _) =>
+                Center(child: Text('$e', style: AppTextStyles.textMuted)),
             data: (chats) {
               if (chats.isEmpty) {
                 return const Center(
@@ -86,7 +85,7 @@ class DmSidebarPanel extends ConsumerWidget {
                         ),
                         SizedBox(height: 8),
                         Text(
-                          'Chua co cuoc tro chuyen',
+                          'Chưa có cuộc trò chuyện',
                           style: AppTextStyles.textMuted,
                           textAlign: TextAlign.center,
                         ),
@@ -123,13 +122,13 @@ class DmSidebarPanel extends ConsumerWidget {
         _buildNavItem(
           context,
           icon: Icons.people_outline,
-          label: 'Ban be',
+          label: 'Bạn bè',
           onTap: () => context.push(AppConstants.friendsPath),
         ),
         _buildNavItem(
           context,
           icon: Icons.person_add_outlined,
-          label: 'Them ban',
+          label: 'Thêm bạn',
           isHighlight: true,
           onTap: () => context.push(AppConstants.addFriendPath),
         ),
@@ -202,7 +201,7 @@ class DmSidebarPanel extends ConsumerWidget {
           return AlertDialog(
             backgroundColor: AppColors.bgSecondary,
             title: const Text(
-              'Tao nhom DM',
+              'Tạo nhóm DM',
               style: AppTextStyles.headerPrimary,
             ),
             content: SizedBox(
@@ -214,7 +213,7 @@ class DmSidebarPanel extends ConsumerWidget {
                     controller: groupNameController,
                     style: AppTextStyles.textNormal,
                     decoration: const InputDecoration(
-                      hintText: 'Ten nhom (bat buoc)',
+                      hintText: 'Tên nhóm (bắt buộc)',
                       hintStyle: TextStyle(color: AppColors.textMuted),
                       filled: true,
                       fillColor: AppColors.inputBackground,
@@ -227,12 +226,12 @@ class DmSidebarPanel extends ConsumerWidget {
                   const SizedBox(height: 12),
                   if (friends.isEmpty)
                     const Text(
-                      'Chua co ban be de them vao nhom',
+                      'Chưa có bạn bè nào để thêm vào nhóm.',
                       style: AppTextStyles.textMuted,
                     )
                   else ...[
                     Text(
-                      'Chon thanh vien:',
+                      'Chọn thành viên:',
                       style: AppTextStyles.textMuted.copyWith(fontSize: 12),
                     ),
                     const SizedBox(height: 8),
@@ -241,8 +240,9 @@ class DmSidebarPanel extends ConsumerWidget {
                       child: ListView.builder(
                         itemCount: friends.length,
                         itemBuilder: (_, i) {
-                          final otherUserId =
-                              friends[i].otherUserId(currentUserId);
+                          final otherUserId = friends[i].otherUserId(
+                            currentUserId,
+                          );
                           return Consumer(
                             builder: (_, ref, __) {
                               final userAsync = ref.watch(
@@ -281,7 +281,7 @@ class DmSidebarPanel extends ConsumerWidget {
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
                 child: const Text(
-                  'Huy',
+                  'Hủy',
                   style: TextStyle(color: AppColors.textMuted),
                 ),
               ),
@@ -290,7 +290,8 @@ class DmSidebarPanel extends ConsumerWidget {
                   backgroundColor: AppColors.brand,
                   foregroundColor: Colors.white,
                 ),
-                onPressed: selectedIds.isEmpty ||
+                onPressed:
+                    selectedIds.isEmpty ||
                         groupNameController.text.trim().isEmpty
                     ? null
                     : () async {
@@ -303,7 +304,7 @@ class DmSidebarPanel extends ConsumerWidget {
                           onChatSelectedCallback(chat.chatId);
                         }
                       },
-                child: const Text('Tao nhom'),
+                child: const Text('Tạo nhóm'),
               ),
             ],
           );
@@ -343,7 +344,7 @@ class _DmChatSidebarTile extends ConsumerWidget {
               ? const Icon(Icons.group, size: 16, color: AppColors.textMuted)
               : null,
         ),
-        title: chat.name.isNotEmpty ? chat.name : 'Nhom DM',
+        title: chat.name.isNotEmpty ? chat.name : 'Nhóm DM',
         subtitle: chat.lastMessagePreview,
       );
     }
@@ -447,7 +448,9 @@ class _AvatarWithStatus extends StatelessWidget {
           CircleAvatar(
             radius: 16,
             backgroundColor: AppColors.bgTertiary,
-            backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+            backgroundImage: avatarUrl.isNotEmpty
+                ? NetworkImage(avatarUrl)
+                : null,
             child: avatarUrl.isEmpty
                 ? Text(
                     username.isNotEmpty ? username[0].toUpperCase() : '?',
