@@ -38,8 +38,21 @@ final _currentMemberRoleIdsProvider =
           .collection('members')
           .doc(params.userId)
           .snapshots()
-          .map((doc) {
-            return List<String>.from(doc.data()?['roleIds'] as List? ?? []);
+          .asyncMap((doc) async {
+            final roleIds = <String>{
+              ...List<String>.from(doc.data()?['roleIds'] as List? ?? []),
+            };
+            final defaultRole = await FirebaseFirestore.instance
+                .collection('servers')
+                .doc(params.serverId)
+                .collection('roles')
+                .where('isDefault', isEqualTo: true)
+                .limit(1)
+                .get();
+            if (defaultRole.docs.isNotEmpty) {
+              roleIds.add(defaultRole.docs.first.id);
+            }
+            return roleIds.toList();
           });
     });
 
@@ -406,9 +419,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ? 0.0
         : targetIndex / (_visibleMessages.length - 1);
     final estimatedOffset = maxScroll * ratio;
-    _scrollController.jumpTo(
-      estimatedOffset.clamp(0.0, maxScroll).toDouble(),
-    );
+    _scrollController.jumpTo(estimatedOffset.clamp(0.0, maxScroll).toDouble());
   }
 
   /// Cuộn đến tin nhắn theo ID (dùng khi click reply preview)
@@ -842,6 +853,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               permission: Permission.sendMessages,
             )),
           );
+    final canDeleteMessagesAsync = currentUserId.isEmpty
+        ? const AsyncValue<bool>.data(false)
+        : ref.watch(
+            hasPermissionProvider((
+              serverId: widget.serverId,
+              userId: currentUserId,
+              permission: Permission.deleteMessages,
+            )),
+          );
+    final canEditMessagesAsync = currentUserId.isEmpty
+        ? const AsyncValue<bool>.data(false)
+        : ref.watch(
+            hasPermissionProvider((
+              serverId: widget.serverId,
+              userId: currentUserId,
+              permission: Permission.editMessages,
+            )),
+          );
     final channelsAsync = ref.watch(
       serverChannelsStreamProvider(widget.serverId),
     );
@@ -858,6 +887,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       memberRoleIdsAsync: memberRoleIdsAsync,
       isServerOwner: isServerOwner,
     );
+    final canDeleteMessages =
+        isServerOwner ||
+        canDeleteMessagesAsync.maybeWhen(
+          data: (value) => value,
+          orElse: () => false,
+        );
+    final canEditMessages =
+        isServerOwner ||
+        canEditMessagesAsync.maybeWhen(
+          data: (value) => value,
+          orElse: () => false,
+        );
     final isCheckingSendPermission = _isCheckingSendPermission(
       serverCanSendMessagesAsync: serverCanSendMessagesAsync,
       channelsAsync: channelsAsync,
@@ -938,7 +979,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     }
 
                     _visibleMessages = visibleMessages;
-                    return _buildMessageList(visibleMessages, currentUserId);
+                    return _buildMessageList(
+                      visibleMessages,
+                      currentUserId,
+                      canDeleteMessages: canDeleteMessages,
+                      canEditMessages: canEditMessages,
+                    );
                   },
                   loading: () => const Center(
                     child: SizedBox(
@@ -1354,7 +1400,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   /// Danh sách tin nhắn
-  Widget _buildMessageList(List<MessageEntity> messages, String currentUserId) {
+  Widget _buildMessageList(
+    List<MessageEntity> messages,
+    String currentUserId, {
+    required bool canDeleteMessages,
+    required bool canEditMessages,
+  }) {
     // Discord-style: "New Messages" divider
     // Được set MỘT LẦN khi mở unread channel, biến mất khi markAsRead
     if (_hasLoadedReadStatus &&
@@ -1441,6 +1492,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           key: messageKey,
           message: message,
           isOwnMessage: isOwnMessage,
+          canEdit: isOwnMessage || canEditMessages,
+          canDelete: isOwnMessage || canDeleteMessages,
           showAvatar: showAvatar,
           currentUserId: currentUserId,
           isMentioned: isMentioned,
@@ -1888,6 +1941,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 class _MessageRow extends ConsumerStatefulWidget {
   final MessageEntity message;
   final bool isOwnMessage;
+  final bool canEdit;
+  final bool canDelete;
   final bool showAvatar;
   final String currentUserId;
   final bool isMentioned;
@@ -1907,6 +1962,8 @@ class _MessageRow extends ConsumerStatefulWidget {
     super.key,
     required this.message,
     required this.isOwnMessage,
+    required this.canEdit,
+    required this.canDelete,
     required this.showAvatar,
     required this.currentUserId,
     required this.isMentioned,
@@ -2108,7 +2165,7 @@ class _MessageRowState extends ConsumerState<_MessageRow>
                 tooltip: 'Trả lời',
               ),
               // Edit (only for own messages)
-              if (widget.isOwnMessage)
+              if (widget.canEdit)
                 _toolbarButton(
                   icon: Icons.edit_rounded,
                   onTap: () => widget.onAction(MessageAction.edit),
@@ -2186,27 +2243,28 @@ class _MessageRowState extends ConsumerState<_MessageRow>
             ],
           ),
         ),
-        PopupMenuItem<String>(
-          value: 'delete',
-          height: 36,
-          child: Row(
-            children: [
-              const Icon(
-                Icons.delete_outline_rounded,
-                size: 16,
-                color: AppColors.red,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Xóa tin nhắn',
-                style: AppTextStyles.bodySecondary.copyWith(
-                  fontSize: 13,
+        if (widget.canDelete)
+          PopupMenuItem<String>(
+            value: 'delete',
+            height: 36,
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.delete_outline_rounded,
+                  size: 16,
                   color: AppColors.red,
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Text(
+                  'Xóa tin nhắn',
+                  style: AppTextStyles.bodySecondary.copyWith(
+                    fontSize: 13,
+                    color: AppColors.red,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
       ],
       color: AppColors.bgFloating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
