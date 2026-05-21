@@ -1,6 +1,8 @@
+import 'package:image_cropper/image_cropper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../home/presentation/providers/home_provider.dart';
@@ -75,7 +77,7 @@ class ServerSettingsScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildServerInfoSection(context, ref, serverId),
+                  _buildServerInfoSection(context, ref, serverId, isOwner),
                   const SizedBox(height: 24),
                   _buildInviteCodeSection(context, ref, serverId),
                   const SizedBox(height: 24),
@@ -92,6 +94,7 @@ class ServerSettingsScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     String serverId,
+    bool isOwner,
   ) {
     final serverName = ref.watch(selectedServerNameProvider);
     final serversAsync = ref.watch(userServersStreamProvider);
@@ -120,21 +123,63 @@ class ServerSettingsScreen extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppColors.brand,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      serverName.isNotEmpty ? serverName[0].toUpperCase() : '?',
-                      style: const TextStyle(
-                        color: AppColors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                      ),
+                  GestureDetector(
+                    onTap: isOwner
+                        ? () => _pickAndUpdateServerIcon(context, ref, serverId)
+                        : null,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: AppColors.brand,
+                            borderRadius: BorderRadius.circular(28),
+                            image: server?.iconUrl.isNotEmpty == true
+                                ? DecorationImage(
+                                    image: NetworkImage(server!.iconUrl),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
+                          alignment: Alignment.center,
+                          child: server?.iconUrl.isNotEmpty == true
+                              ? null
+                              : Text(
+                                  serverName.isNotEmpty
+                                      ? serverName[0].toUpperCase()
+                                      : '?',
+                                  style: const TextStyle(
+                                    color: AppColors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                        ),
+                        if (isOwner)
+                          Positioned(
+                            right: -2,
+                            bottom: -2,
+                            child: Container(
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                color: AppColors.bgTertiary,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: AppColors.bgSecondary,
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.camera_alt,
+                                color: AppColors.interactiveNormal,
+                                size: 12,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -155,6 +200,18 @@ class ServerSettingsScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
+                  if (isOwner) ...[
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: () =>
+                          _pickAndUpdateServerIcon(context, ref, serverId),
+                      icon: const Icon(Icons.image_outlined, size: 18),
+                      label: const Text('Đổi ảnh'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.brand,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -270,6 +327,59 @@ class ServerSettingsScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _pickAndUpdateServerIcon(
+    BuildContext context,
+    WidgetRef ref,
+    String serverId,
+  ) async {
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 90,
+      maxWidth: 2048,
+      maxHeight: 2048,
+    );
+    if (image == null) return;
+
+    if (!context.mounted) return;
+    final croppedImage = await ImageCropper().cropImage(
+      sourcePath: image.path,
+      maxWidth: 512,
+      maxHeight: 512,
+      compressQuality: 85,
+      compressFormat: ImageCompressFormat.jpg,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Cắt ảnh server',
+          toolbarColor: AppColors.bgTertiary,
+          toolbarWidgetColor: AppColors.white,
+          backgroundColor: AppColors.bgPrimary,
+          activeControlsWidgetColor: AppColors.brand,
+          lockAspectRatio: true,
+          initAspectRatio: CropAspectRatioPreset.square,
+          cropStyle: CropStyle.rectangle,
+          hideBottomControls: false,
+        ),
+      ],
+    );
+    if (croppedImage == null) return;
+
+    final success = await ref
+        .read(serverSettingsNotifierProvider.notifier)
+        .updateServerIcon(
+          serverId: serverId,
+          imageFile: XFile(croppedImage.path),
+        );
+
+    if (!context.mounted || !success) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Đã cập nhật ảnh đại diện server'),
+        backgroundColor: AppColors.green,
       ),
     );
   }
@@ -430,11 +540,6 @@ class ServerSettingsScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Vùng nguy hiểm',
-          style: AppTextStyles.header3.copyWith(color: AppColors.red),
-        ),
-        const SizedBox(height: 8),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(16),

@@ -1,4 +1,6 @@
 // lib/features/server/data/datasources/server_remote_datasource.dart
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/errors/exceptions.dart';
@@ -288,51 +290,102 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
 
   @override
   Stream<List<ServerModel>> getUserServersStream({required String userId}) {
-    return firestore
+    return _watchUserServers(userId: userId);
+  }
+
+  Stream<List<ServerModel>> _watchUserServers({required String userId}) {
+    late StreamSubscription<QuerySnapshot<Map<String, dynamic>>>
+    membersSubscription;
+    final serverSubscriptions =
+        <String, StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>>{};
+    final serverIds = <String>[];
+    final serverModels = <String, ServerModel>{};
+
+    final controller = StreamController<List<ServerModel>>(
+      onCancel: () async {
+        await membersSubscription.cancel();
+        for (final subscription in serverSubscriptions.values) {
+          await subscription.cancel();
+        }
+        serverSubscriptions.clear();
+      },
+    );
+
+    void emitServers() {
+      if (controller.isClosed) return;
+      controller.add([
+        for (final serverId in serverIds)
+          if (serverModels.containsKey(serverId)) serverModels[serverId]!,
+      ]);
+    }
+
+    membersSubscription = firestore
         .collectionGroup('members')
         .where('userId', isEqualTo: userId)
         .snapshots()
-        .asyncMap((membersSnapshot) async {
-          if (membersSnapshot.docs.isEmpty) {
-            return [];
-          }
+        .listen(
+          (membersSnapshot) {
+            final nextServerIds = membersSnapshot.docs
+                .map((doc) => doc.reference.parent.parent?.id)
+                .whereType<String>()
+                .toSet()
+                .toList();
 
-          // Lấy serverIds từ members
-          final serverIds = membersSnapshot.docs
-              .map((doc) => doc.reference.parent.parent?.id)
-              .whereType<String>()
-              .toList();
+            final removedServerIds = serverIds
+                .where((serverId) => !nextServerIds.contains(serverId))
+                .toList();
+            for (final removedServerId in removedServerIds) {
+              serverSubscriptions.remove(removedServerId)?.cancel();
+              serverModels.remove(removedServerId);
+            }
 
-          if (serverIds.isEmpty) {
-            return [];
-          }
+            serverIds
+              ..clear()
+              ..addAll(nextServerIds);
 
-          // Lấy server documents
-          final List<ServerModel> servers = [];
-          for (final serverId in serverIds) {
-            try {
-              final serverDoc = await firestore
+            for (final serverId in nextServerIds) {
+              if (serverSubscriptions.containsKey(serverId)) continue;
+
+              serverSubscriptions[serverId] = firestore
                   .collection('servers')
                   .doc(serverId)
-                  .get();
-              if (serverDoc.exists) {
-                servers.add(
-                  ServerModel.fromFirestore(
-                    serverDoc.data() ?? {},
-                    serverDoc.id,
-                  ),
-                );
-              }
-            } catch (e) {
-              Logger.error(
-                'Error loading server $serverId: $e',
-                tag: 'ServerDatasource',
-              );
+                  .snapshots()
+                  .listen(
+                    (serverDoc) {
+                      if (serverDoc.exists) {
+                        serverModels[serverId] = ServerModel.fromFirestore(
+                          serverDoc.data() ?? {},
+                          serverDoc.id,
+                        );
+                      } else {
+                        serverModels.remove(serverId);
+                      }
+                      emitServers();
+                    },
+                    onError: (Object error, StackTrace stackTrace) {
+                      Logger.error(
+                        'Error loading server $serverId: $error',
+                        tag: 'ServerDatasource',
+                      );
+                      if (!controller.isClosed) {
+                        controller.addError(error, stackTrace);
+                      }
+                    },
+                  );
             }
-          }
 
-          return servers;
-        });
+            if (nextServerIds.isEmpty) {
+              emitServers();
+            }
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            if (!controller.isClosed) {
+              controller.addError(error, stackTrace);
+            }
+          },
+        );
+
+    return controller.stream;
   }
 
   @override

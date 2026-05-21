@@ -3,18 +3,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../message/presentation/providers/message_provider.dart';
+import '../../../server/domain/entities/server_entity.dart';
 import '../../../server/presentation/providers/server_provider.dart';
 import '../providers/home_provider.dart';
+import 'server_icon_button.dart';
 
 class ServerListRail extends ConsumerWidget {
   final VoidCallback onAddServer;
+  final Future<void> Function(ServerEntity server)? onServerSelected;
 
   const ServerListRail({
     super.key,
     required this.onAddServer,
+    this.onServerSelected,
   });
 
   @override
@@ -28,7 +31,7 @@ class ServerListRail extends ConsumerWidget {
       child: Column(
         children: [
           const SizedBox(height: 12),
-          _ServerIconButton(
+          ServerIconButton(
             isSelected: selectedServerId == null,
             child: const Icon(
               Icons.chat_bubble_rounded,
@@ -39,6 +42,7 @@ class ServerListRail extends ConsumerWidget {
               ref.read(selectedServerIdProvider.notifier).state = null;
               ref.read(selectedServerNameProvider.notifier).state =
                   'Direct Messages';
+              ref.read(selectedChannelIdProvider.notifier).state = null;
             },
           ),
           const SizedBox(height: 8),
@@ -64,24 +68,28 @@ class ServerListRail extends ConsumerWidget {
 
                     return Tooltip(
                       message: server.name,
-                      child: _ServerIconButton(
+                      child: ServerIconButton(
                         isSelected: isSelected,
-                        hasIndicator: ref.watch(
+                        indicatorStyle: ServerIconIndicatorStyle.bottomDot,
+                        hasUnread: ref.watch(
                           serverHasUnreadProvider(server.serverId),
                         ),
                         child: server.iconUrl.isNotEmpty
-                            ? ClipOval(
-                                child: Image.network(
-                                  server.iconUrl,
-                                  width: 28,
-                                  height: 28,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) =>
-                                      _ServerInitial(name: server.name),
-                                ),
+                            ? Image.network(
+                                server.iconUrl,
+                                width: 48,
+                                height: 48,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    ServerIconInitial(name: server.name),
                               )
-                            : _ServerInitial(name: server.name),
+                            : ServerIconInitial(name: server.name),
                         onTap: () {
+                          final selectServer = onServerSelected;
+                          if (selectServer != null) {
+                            selectServer(server);
+                            return;
+                          }
                           ref.read(selectedServerIdProvider.notifier).state =
                               server.serverId;
                           ref.read(selectedServerNameProvider.notifier).state =
@@ -112,80 +120,13 @@ class ServerListRail extends ConsumerWidget {
           ),
           Tooltip(
             message: 'Thêm server',
-            child: _ServerIconButton(
+            child: ServerIconButton(
               child: const Icon(Icons.add, color: AppColors.green, size: 20),
               onTap: onAddServer,
             ),
           ),
           const SizedBox(height: 12),
         ],
-      ),
-    );
-  }
-}
-
-class _ServerIconButton extends StatelessWidget {
-  final Widget child;
-  final VoidCallback onTap;
-  final bool isSelected;
-  final bool hasIndicator;
-
-  const _ServerIconButton({
-    required this.child,
-    required this.onTap,
-    this.isSelected = false,
-    this.hasIndicator = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        children: [
-          InkWell(
-            onTap: onTap,
-            customBorder: const CircleBorder(),
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: isSelected ? AppColors.brand : AppColors.bgPrimary,
-                borderRadius: BorderRadius.circular(isSelected ? 16 : 24),
-              ),
-              alignment: Alignment.center,
-              child: child,
-            ),
-          ),
-          if (hasIndicator) ...[
-            const SizedBox(height: 4),
-            Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: AppColors.white,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _ServerInitial extends StatelessWidget {
-  final String name;
-
-  const _ServerInitial({required this.name});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      name.isNotEmpty ? name[0].toUpperCase() : '?',
-      style: AppTextStyles.headerSecondary.copyWith(
-        fontSize: 18,
-        color: AppColors.white,
       ),
     );
   }

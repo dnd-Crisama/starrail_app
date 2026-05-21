@@ -2,8 +2,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/usecases/usecase.dart';
+import '../../../auth/data/datasources/cloudinary_storage_datasource.dart';
 import '../../domain/entities/server_entity.dart';
 import '../../domain/repositories/server_repository.dart';
 import '../../domain/usecases/create_server_usecase.dart';
@@ -258,6 +260,33 @@ class ServerSettingsNotifier extends StateNotifier<ServerSettingsState> {
         return true;
       },
     );
+  }
+
+  Future<bool> updateServerIcon({
+    required String serverId,
+    required XFile imageFile,
+  }) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+
+    try {
+      final imageUrl = await CloudinaryStorageDatasource().uploadImage(
+        imageFile,
+      );
+      await FirebaseFirestore.instance.collection('servers').doc(serverId).update(
+        {
+          'iconUrl': imageUrl,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+      );
+      state = state.copyWith(isLoading: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Không thể cập nhật ảnh server: $e',
+      );
+      return false;
+    }
   }
 
   void clearError() {
