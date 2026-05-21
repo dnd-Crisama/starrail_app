@@ -44,7 +44,7 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
           next.errorMessage == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Server created successfully!'),
+            content: Text('Tạo Server thành công!'),
             backgroundColor: AppColors.green,
           ),
         );
@@ -64,7 +64,7 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
       backgroundColor: AppColors.bgPrimary,
       appBar: AppBar(
         backgroundColor: AppColors.bgSecondary,
-        title: const Text('Create Server'),
+        title: const Text('Tạo Server'),
         elevation: 0,
       ),
       body: Center(
@@ -79,18 +79,18 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Create a New Server',
+                    'Tạo Server của bạn',
                     style: AppTextStyles.headerPrimary.copyWith(fontSize: 24),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Your server is where you and your friends hang out.',
+                    'Server của bạn là nơi bạn và bạn bè của bạn gặp gỡ.',
                     style: AppTextStyles.textMuted,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
-                  const Text('SERVER NAME', style: AppTextStyles.inputLabel),
+                  const Text('TÊN SERVER', style: AppTextStyles.inputLabel),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _serverNameController,

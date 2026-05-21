@@ -44,7 +44,7 @@ class _JoinServerScreenState extends ConsumerState<JoinServerScreen> {
           next.errorMessage == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Joined server successfully!'),
+            content: Text('Tham gia Server thành công!'),
             backgroundColor: AppColors.green,
           ),
         );
@@ -64,7 +64,7 @@ class _JoinServerScreenState extends ConsumerState<JoinServerScreen> {
       backgroundColor: AppColors.bgPrimary,
       appBar: AppBar(
         backgroundColor: AppColors.bgSecondary,
-        title: const Text('Join Server'),
+        title: const Text('Tham gia Server'),
         elevation: 0,
       ),
       body: Center(
@@ -79,18 +79,18 @@ class _JoinServerScreenState extends ConsumerState<JoinServerScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Join a Server',
+                    'Tham gia Server',
                     style: AppTextStyles.headerPrimary.copyWith(fontSize: 24),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Enter an invite code to join a server.',
+                    'Nhập mã mời để tham gia một server.',
                     style: AppTextStyles.textMuted,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
-                  const Text('INVITE CODE', style: AppTextStyles.inputLabel),
+                  const Text('MÃ MỜI', style: AppTextStyles.inputLabel),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _inviteCodeController,
