@@ -79,6 +79,5 @@ Sau khi chụp màn hình app, hãy tạo thư mục `docs/screenshots/` và th�
 | Image Cropper | Cắt/chỉnh ảnh |
 | Flutter Dotenv | Đọc biến môi trường từ file `.env` |
 | Intl | Định dạng ngày tháng, có khởi tạo locale `vi_VN` |
-| Freezed / Build Runner | Hỗ trợ generate code |
 | Equatable | So sánh object |
 | UUID | Tạo định danh |
