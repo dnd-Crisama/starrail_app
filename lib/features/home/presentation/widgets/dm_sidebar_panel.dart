@@ -5,12 +5,12 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_avatar.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../friend/presentation/providers/dm_provider.dart';
 import '../../../friend/presentation/providers/friend_provider.dart';
 import '../../../friend/presentation/widgets/create_group_dm_dialog.dart';
-
 
 /// Sidebar hien thi danh sach DM chats va nut tao Group DM.
 class DmSidebarPanel extends ConsumerWidget {
@@ -197,7 +197,6 @@ class DmSidebarPanel extends ConsumerWidget {
   }
 }
 
-
 class _DmChatSidebarTile extends ConsumerWidget {
   final dynamic chat;
   final String currentUserId;
@@ -213,22 +212,25 @@ class _DmChatSidebarTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isOwnerOr1to1 = !chat.isGroupDm ||
-        (chat.participants.isNotEmpty && chat.participants.first == currentUserId);
+    final isOwnerOr1to1 =
+        !chat.isGroupDm ||
+        (chat.participants.isNotEmpty &&
+            chat.participants.first == currentUserId);
 
     if (chat.isGroupDm) {
       return _buildTile(
         context,
         ref,
-        leading: CircleAvatar(
-          radius: 16,
+        leading: AppAvatar(
+          imageUrl: chat.iconUrl ?? '',
+          displayName: chat.name,
+          size: 32,
           backgroundColor: AppColors.bgTertiary,
-          backgroundImage: chat.iconUrl != null && chat.iconUrl!.isNotEmpty
-              ? NetworkImage(chat.iconUrl!)
-              : null,
-          child: chat.iconUrl == null || chat.iconUrl!.isEmpty
-              ? const Icon(Icons.group, size: 16, color: AppColors.textMuted)
-              : null,
+          fallbackIcon: const Icon(
+            Icons.group,
+            size: 16,
+            color: AppColors.textMuted,
+          ),
         ),
         title: chat.name.isNotEmpty ? chat.name : 'Nhóm DM',
         subtitle: chat.lastMessagePreview,
@@ -312,7 +314,11 @@ class _DmChatSidebarTile extends ConsumerWidget {
                 ),
                 if (showDelete)
                   IconButton(
-                    icon: const Icon(Icons.close, size: 14, color: AppColors.textMuted),
+                    icon: const Icon(
+                      Icons.close,
+                      size: 14,
+                      color: AppColors.textMuted,
+                    ),
                     onPressed: () => _showDeleteWarningDialog(context, ref),
                     splashRadius: 14,
                     padding: EdgeInsets.zero,
@@ -327,20 +333,29 @@ class _DmChatSidebarTile extends ConsumerWidget {
     );
   }
 
-  Future<void> _showDeleteWarningDialog(BuildContext context, WidgetRef ref) async {
+  Future<void> _showDeleteWarningDialog(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     return showDialog<void>(
       context: context,
       builder: (BuildContext ctx) {
         return AlertDialog(
           backgroundColor: AppColors.bgSecondary,
-          title: const Text('Xóa cuộc hội thoại', style: AppTextStyles.headerPrimary),
+          title: const Text(
+            'Xóa cuộc hội thoại',
+            style: AppTextStyles.headerPrimary,
+          ),
           content: const Text(
             'Bạn có chắc chắn muốn xóa cuộc trò chuyện này? Tất cả tin nhắn trong cuộc trò chuyện này sẽ bị xóa vĩnh viễn và không thể khôi phục.',
             style: AppTextStyles.textNormal,
           ),
           actions: <Widget>[
             TextButton(
-              child: const Text('Hủy bỏ', style: TextStyle(color: AppColors.textMuted)),
+              child: const Text(
+                'Hủy bỏ',
+                style: TextStyle(color: AppColors.textMuted),
+              ),
               onPressed: () {
                 Navigator.of(ctx).pop();
               },
@@ -349,12 +364,16 @@ class _DmChatSidebarTile extends ConsumerWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.red,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
               child: const Text('Xóa'),
               onPressed: () async {
                 Navigator.of(ctx).pop(); // close warning dialog first
-                final success = await ref.read(dmChatNotifierProvider.notifier).deleteDmChat(chat.chatId);
+                final success = await ref
+                    .read(dmChatNotifierProvider.notifier)
+                    .deleteDmChat(chat.chatId);
                 if (success && context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -391,18 +410,12 @@ class _AvatarWithStatus extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          CircleAvatar(
-            radius: 16,
+          AppAvatar(
+            imageUrl: avatarUrl,
+            displayName: username,
+            size: 32,
             backgroundColor: AppColors.bgTertiary,
-            backgroundImage: avatarUrl.isNotEmpty
-                ? NetworkImage(avatarUrl)
-                : null,
-            child: avatarUrl.isEmpty
-                ? Text(
-                    username.isNotEmpty ? username[0].toUpperCase() : '?',
-                    style: AppTextStyles.labelPrimary.copyWith(fontSize: 12),
-                  )
-                : null,
+            textStyle: AppTextStyles.labelPrimary.copyWith(fontSize: 12),
           ),
           Positioned(
             right: 1,

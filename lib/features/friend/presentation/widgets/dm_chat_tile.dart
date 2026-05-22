@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_avatar.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/dm_chat_entity.dart';
 import '../providers/friend_provider.dart';
@@ -24,8 +25,10 @@ class DmChatTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentUserId = ref.watch(authNotifierProvider).user?.uid ?? '';
-    final isOwnerOr1to1 = !chat.isGroupDm ||
-        (chat.participants.isNotEmpty && chat.participants.first == currentUserId);
+    final isOwnerOr1to1 =
+        !chat.isGroupDm ||
+        (chat.participants.isNotEmpty &&
+            chat.participants.first == currentUserId);
 
     if (chat.isGroupDm) {
       return _buildGroupTile(context, ref, isOwnerOr1to1);
@@ -75,25 +78,22 @@ class DmChatTile extends ConsumerWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
       decoration: BoxDecoration(
-        color: isSelected
-            ? AppColors.bgModifierSelected
-            : Colors.transparent,
+        color: isSelected ? AppColors.bgModifierSelected : Colors.transparent,
         borderRadius: BorderRadius.circular(6),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         onTap: onTap,
-        leading: CircleAvatar(
-          radius: 18,
+        leading: AppAvatar(
+          imageUrl: avatarUrl,
+          displayName: displayName,
+          size: 36,
           backgroundColor: AppColors.bgTertiary,
-          backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-          child: avatarUrl.isEmpty
-              ? Icon(
-                  isGroup ? Icons.group : Icons.person,
-                  color: AppColors.textMuted,
-                  size: 18,
-                )
-              : null,
+          fallbackIcon: Icon(
+            isGroup ? Icons.group : Icons.person,
+            color: AppColors.textMuted,
+            size: 18,
+          ),
         ),
         title: Text(
           displayName,
@@ -115,7 +115,11 @@ class DmChatTile extends ConsumerWidget {
             : null,
         trailing: showDelete
             ? IconButton(
-                icon: const Icon(Icons.close, size: 16, color: AppColors.textMuted),
+                icon: const Icon(
+                  Icons.close,
+                  size: 16,
+                  color: AppColors.textMuted,
+                ),
                 onPressed: () => _showDeleteWarningDialog(context, ref),
                 splashRadius: 16,
                 tooltip: 'Xóa cuộc trò chuyện',
@@ -125,20 +129,29 @@ class DmChatTile extends ConsumerWidget {
     );
   }
 
-  Future<void> _showDeleteWarningDialog(BuildContext context, WidgetRef ref) async {
+  Future<void> _showDeleteWarningDialog(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     return showDialog<void>(
       context: context,
       builder: (BuildContext ctx) {
         return AlertDialog(
           backgroundColor: AppColors.bgSecondary,
-          title: const Text('Xóa cuộc hội thoại', style: AppTextStyles.headerPrimary),
+          title: const Text(
+            'Xóa cuộc hội thoại',
+            style: AppTextStyles.headerPrimary,
+          ),
           content: const Text(
             'Bạn có chắc chắn muốn xóa cuộc trò chuyện này? Tất cả tin nhắn trong cuộc trò chuyện này sẽ bị xóa vĩnh viễn và không thể khôi phục.',
             style: AppTextStyles.textNormal,
           ),
           actions: <Widget>[
             TextButton(
-              child: const Text('Hủy bỏ', style: TextStyle(color: AppColors.textMuted)),
+              child: const Text(
+                'Hủy bỏ',
+                style: TextStyle(color: AppColors.textMuted),
+              ),
               onPressed: () {
                 Navigator.of(ctx).pop();
               },
@@ -147,12 +160,16 @@ class DmChatTile extends ConsumerWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.red,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
               child: const Text('Xóa'),
               onPressed: () async {
                 Navigator.of(ctx).pop(); // close warning dialog first
-                final success = await ref.read(dmChatNotifierProvider.notifier).deleteDmChat(chat.chatId);
+                final success = await ref
+                    .read(dmChatNotifierProvider.notifier)
+                    .deleteDmChat(chat.chatId);
                 if (success && context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -171,12 +188,11 @@ class DmChatTile extends ConsumerWidget {
 
   Widget _buildLoadingTile() {
     return ListTile(
-      leading: const CircleAvatar(radius: 18, backgroundColor: AppColors.bgTertiary),
-      title: Container(
-        height: 12,
-        width: 80,
-        color: AppColors.bgTertiary,
+      leading: const CircleAvatar(
+        radius: 18,
+        backgroundColor: AppColors.bgTertiary,
       ),
+      title: Container(height: 12, width: 80, color: AppColors.bgTertiary),
     );
   }
 

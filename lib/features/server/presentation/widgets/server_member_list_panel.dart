@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_avatar.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../providers/server_member_provider.dart';
 
@@ -19,10 +19,14 @@ class ServerMemberListPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final groupedMembersAsync = ref.watch(groupedServerMembersProvider(serverId));
+    final groupedMembersAsync = ref.watch(
+      groupedServerMembersProvider(serverId),
+    );
 
     return Container(
-      width: isMobile ? null : 240, // 240px là width chuẩn của Discord member list trên desktop
+      width: isMobile
+          ? null
+          : 240, // 240px là width chuẩn của Discord member list trên desktop
       color: AppColors.bgSecondary,
       child: groupedMembersAsync.when(
         data: (groups) {
@@ -88,7 +92,11 @@ class ServerMemberListPanel extends ConsumerWidget {
     );
   }
 
-  Widget _buildMemberItem(BuildContext context, UserEntity profile, Color? roleColor) {
+  Widget _buildMemberItem(
+    BuildContext context,
+    UserEntity profile,
+    Color? roleColor,
+  ) {
     // Nếu status là offline, làm mờ avatar và tên
     final isOffline = profile.status == UserStatus.offline;
     final opacity = isOffline ? 0.5 : 1.0;
@@ -132,31 +140,15 @@ class ServerMemberListPanel extends ConsumerWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // Avatar
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.brand,
-              image: profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty
-                  ? DecorationImage(
-                      image: NetworkImage(profile.avatarUrl!),
-                      fit: BoxFit.cover,
-                    )
-                  : null,
+          AppAvatar(
+            imageUrl: profile.avatarUrl,
+            displayName: profile.username,
+            size: 32,
+            textStyle: const TextStyle(
+              color: AppColors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
             ),
-            alignment: Alignment.center,
-            child: profile.avatarUrl == null || profile.avatarUrl!.isEmpty
-                ? Text(
-                    profile.username.isNotEmpty ? profile.username[0].toUpperCase() : '?',
-                    style: const TextStyle(
-                      color: AppColors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  )
-                : null,
           ),
           // Status indicator
           Positioned(

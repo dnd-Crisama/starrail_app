@@ -30,10 +30,11 @@ class AttachmentDisplay extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 300, maxHeight: 300),
+          constraints: const BoxConstraints(maxWidth: 400, maxHeight: 400),
           child: Image.network(
             attachment.url,
-            fit: BoxFit.cover,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
             errorBuilder: (_, __, ___) => _buildImageError(attachment),
             loadingBuilder: (_, child, loadingProgress) {
               if (loadingProgress == null) return child;

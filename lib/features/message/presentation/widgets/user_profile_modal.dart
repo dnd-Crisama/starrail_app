@@ -1,36 +1,25 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_avatar.dart';
 import '../../../auth/domain/entities/user_entity.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../friend/domain/entities/friendship_entity.dart';
+import '../../../friend/presentation/providers/dm_provider.dart';
+import '../../../friend/presentation/providers/friend_provider.dart';
+import '../../../home/presentation/providers/home_provider.dart';
 
 /// Discord-style profile popup khi click vào avatar hoặc tên user khác
-class UserServerRoleBadge {
-  final String roleId;
-  final String name;
-  final int color;
-  final int hierarchyLevel;
-  final bool isDefault;
-
-  const UserServerRoleBadge({
-    required this.roleId,
-    required this.name,
-    required this.color,
-    required this.hierarchyLevel,
-    required this.isDefault,
-  });
-}
-
-class UserProfileModal extends StatelessWidget {
+class UserProfileModal extends ConsumerWidget {
   final UserEntity user;
-  final List<UserServerRoleBadge> serverRoles;
   final int mutualServers;
   final int mutualFriends;
 
   const UserProfileModal({
     super.key,
     required this.user,
-    this.serverRoles = const [],
     this.mutualServers = 0,
     this.mutualFriends = 0,
   });
@@ -39,7 +28,6 @@ class UserProfileModal extends StatelessWidget {
   static Future<void> show(
     BuildContext context, {
     required UserEntity user,
-    List<UserServerRoleBadge> serverRoles = const [],
     int mutualServers = 0,
     int mutualFriends = 0,
   }) {
@@ -48,7 +36,6 @@ class UserProfileModal extends StatelessWidget {
       barrierColor: AppColors.scrim,
       builder: (_) => UserProfileModal(
         user: user,
-        serverRoles: serverRoles,
         mutualServers: mutualServers,
         mutualFriends: mutualFriends,
       ),
@@ -59,7 +46,6 @@ class UserProfileModal extends StatelessWidget {
   static Future<void> showFromUid(
     BuildContext context, {
     required String uid,
-    String? serverId,
   }) async {
     try {
       final doc = await FirebaseFirestore.instance
@@ -83,12 +69,9 @@ class UserProfileModal extends StatelessWidget {
         lastSeenAt:
             (data['lastSeenAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       );
-      final serverRoles = serverId == null
-          ? <UserServerRoleBadge>[]
-          : await _loadServerRoles(serverId: serverId, uid: uid);
 
       if (context.mounted) {
-        show(context, user: user, serverRoles: serverRoles);
+        show(context, user: user);
       }
     } catch (_) {
       // Silent fail — không hiển thị gì nếu không lấy được data
@@ -110,69 +93,14 @@ class UserProfileModal extends StatelessWidget {
     }
   }
 
-  static Future<List<UserServerRoleBadge>> _loadServerRoles({
-    required String serverId,
-    required String uid,
-  }) async {
-    final memberDoc = await FirebaseFirestore.instance
-        .collection('servers')
-        .doc(serverId)
-        .collection('members')
-        .doc(uid)
-        .get();
-    if (!memberDoc.exists) return [];
-
-    final roleIds = <String>{
-      ...List<String>.from(memberDoc.data()?['roleIds'] as List? ?? []),
-    };
-
-    final defaultRoleQuery = await FirebaseFirestore.instance
-        .collection('servers')
-        .doc(serverId)
-        .collection('roles')
-        .where('isDefault', isEqualTo: true)
-        .limit(1)
-        .get();
-    if (defaultRoleQuery.docs.isNotEmpty) {
-      roleIds.add(defaultRoleQuery.docs.first.id);
-    }
-
-    final roles = <UserServerRoleBadge>[];
-    for (final roleId in roleIds) {
-      final roleDoc = await FirebaseFirestore.instance
-          .collection('servers')
-          .doc(serverId)
-          .collection('roles')
-          .doc(roleId)
-          .get();
-      if (!roleDoc.exists) continue;
-
-      final roleData = roleDoc.data()!;
-      roles.add(
-        UserServerRoleBadge(
-          roleId: roleDoc.id,
-          name: roleData['name'] as String? ?? 'role',
-          color: roleData['color'] as int? ?? 0xFF99AAB5,
-          hierarchyLevel: roleData['hierarchyLevel'] as int? ?? 0,
-          isDefault: roleData['isDefault'] as bool? ?? false,
-        ),
-      );
-    }
-
-    roles.sort((a, b) {
-      final levelCompare = b.hierarchyLevel.compareTo(a.hierarchyLevel);
-      if (levelCompare != 0) return levelCompare;
-      if (a.isDefault != b.isDefault) return a.isDefault ? 1 : -1;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
-    return roles;
-  }
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentUserId = ref.watch(authNotifierProvider).user?.uid ?? '';
+    final isSelf = currentUserId == user.uid;
+
     return Center(
       child: Container(
-        width: 340,
+        width: 360,
         constraints: const BoxConstraints(maxHeight: 480),
         decoration: BoxDecoration(
           color: AppColors.bgFloating,
@@ -192,117 +120,101 @@ class UserProfileModal extends StatelessWidget {
             // Banner + Avatar section
             _buildBannerWithAvatar(),
             // User info section
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 44, 16, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Username
-                    Text(
-                      user.username,
-                      style: AppTextStyles.headerPrimary.copyWith(fontSize: 20),
-                    ),
-                    const SizedBox(height: 2),
-                    // Username + status
-                    Row(
-                      children: [
-                        Text(
-                          user.username,
-                          style: AppTextStyles.textMutedSmall.copyWith(
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusDot(size: 8),
-                        const SizedBox(width: 4),
-                        Text(
-                          _statusLabel,
-                          style: AppTextStyles.textMutedSmall.copyWith(
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                    // Mutual info
-                    if (mutualFriends > 0 || mutualServers > 0) ...[
-                      const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Username
+                  Text(
+                    user.username,
+                    style: AppTextStyles.headerPrimary.copyWith(fontSize: 20),
+                  ),
+                  const SizedBox(height: 2),
+                  // Username + status
+                  Row(
+                    children: [
                       Text(
-                        '$mutualFriends Bạn chung • $mutualServers Máy chủ chung',
+                        user.username,
+                        style: AppTextStyles.textMutedSmall.copyWith(
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _buildStatusDot(size: 8),
+                      const SizedBox(width: 4),
+                      Text(
+                        _statusLabel,
+                        style: AppTextStyles.textMutedSmall.copyWith(
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Mutual info
+                  if (mutualFriends > 0 || mutualServers > 0) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '$mutualFriends Bạn chung • $mutualServers Máy chủ chung',
+                      style: AppTextStyles.textMutedSmall.copyWith(
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                  if (!isSelf) ...[
+                    const SizedBox(height: 14),
+                    _buildActionButtons(context, ref, currentUserId),
+                  ],
+                  // Bio
+                  if (user.bio.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgModifierHover,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'VỀ BẢN THÂN',
+                            style: AppTextStyles.header4.copyWith(
+                              fontSize: 10,
+                              color: AppColors.textNormal,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            user.bio,
+                            style: AppTextStyles.bodySecondary.copyWith(
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  // Created at
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.calendar_today,
+                        size: 14,
+                        color: AppColors.textMuted,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Tham gia ngày ${_formatDate(user.createdAt)}',
                         style: AppTextStyles.textMutedSmall.copyWith(
                           fontSize: 12,
                         ),
                       ),
                     ],
-                    if (serverRoles.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        'Vai trò',
-                        style: AppTextStyles.header4.copyWith(
-                          fontSize: 10,
-                          color: AppColors.textNormal,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: serverRoles
-                            .map((role) => _buildRoleChip(role))
-                            .toList(),
-                      ),
-                    ],
-                    // Bio
-                    if (user.bio.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.bgModifierHover,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'VỀ BẢN THÂN',
-                              style: AppTextStyles.header4.copyWith(
-                                fontSize: 10,
-                                color: AppColors.textNormal,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              user.bio,
-                              style: AppTextStyles.bodySecondary.copyWith(
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    // Created at
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.calendar_today,
-                          size: 14,
-                          color: AppColors.textMuted,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Tham gia ngày ${_formatDate(user.createdAt)}',
-                          style: AppTextStyles.textMutedSmall.copyWith(
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -311,51 +223,226 @@ class UserProfileModal extends StatelessWidget {
     );
   }
 
-  Widget _buildRoleChip(UserServerRoleBadge role) {
-    final roleColor = Color(role.color);
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 280),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.bgModifierHover,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: AppColors.border, width: 0.5),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: roleColor, shape: BoxShape.circle),
+  Widget _buildActionButtons(
+    BuildContext context,
+    WidgetRef ref,
+    String currentUserId,
+  ) {
+    final friendship = _relationshipWith(ref, currentUserId);
+    final isFriend = friendship?.status == FriendshipStatus.accepted;
+    final isPending = friendship?.status == FriendshipStatus.pending;
+    final isIncoming = isPending && friendship?.requesterId != currentUserId;
+    final friendActionState = ref.watch(friendActionNotifierProvider);
+    final dmState = ref.watch(dmChatNotifierProvider);
+
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 36,
+            child: _friendButton(
+              context: context,
+              ref: ref,
+              friendship: friendship,
+              isFriend: isFriend,
+              isPending: isPending,
+              isIncoming: isIncoming,
+              isLoading: friendActionState.isLoading,
+            ),
           ),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              role.name,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.textMutedSmall.copyWith(
-                color: AppColors.textNormal,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: SizedBox(
+            height: 36,
+            child: FilledButton.icon(
+              onPressed: dmState.isLoading
+                  ? null
+                  : () => _openDirectMessage(context, ref),
+              icon: dmState.isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.chat_bubble_outline_rounded, size: 17),
+              label: const Text('DM'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.brand,
+                foregroundColor: AppColors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
             ),
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _friendButton({
+    required BuildContext context,
+    required WidgetRef ref,
+    required FriendshipEntity? friendship,
+    required bool isFriend,
+    required bool isPending,
+    required bool isIncoming,
+    required bool isLoading,
+  }) {
+    if (isFriend) {
+      return OutlinedButton.icon(
+        onPressed: null,
+        icon: const Icon(Icons.check_rounded, size: 18),
+        label: const Text('Friend'),
+        style: OutlinedButton.styleFrom(
+          disabledForegroundColor: AppColors.statusOnline,
+          side: const BorderSide(color: AppColors.statusOnline),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        ),
+      );
+    }
+
+    if (isIncoming && friendship != null) {
+      return FilledButton.icon(
+        onPressed: isLoading
+            ? null
+            : () => _acceptFriendRequest(context, ref, friendship.friendshipId),
+        icon: isLoading
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.person_add_alt_1_rounded, size: 18),
+        label: const Text('Accept'),
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.green,
+          foregroundColor: AppColors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        ),
+      );
+    }
+
+    if (isPending) {
+      return OutlinedButton.icon(
+        onPressed: null,
+        icon: const Icon(Icons.schedule_rounded, size: 18),
+        label: const Text('Pending'),
+        style: OutlinedButton.styleFrom(
+          disabledForegroundColor: AppColors.textMuted,
+          side: const BorderSide(color: AppColors.border),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        ),
+      );
+    }
+
+    return FilledButton.icon(
+      onPressed: isLoading ? null : () => _sendFriendRequest(context, ref),
+      icon: isLoading
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.person_add_alt_1_rounded, size: 18),
+      label: const Text('Add Friend'),
+      style: FilledButton.styleFrom(
+        backgroundColor: AppColors.green,
+        foregroundColor: AppColors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       ),
     );
   }
 
+  FriendshipEntity? _relationshipWith(WidgetRef ref, String currentUserId) {
+    final allRelationships = [
+      ...(ref.watch(friendsStreamProvider).value ?? const <FriendshipEntity>[]),
+      ...(ref.watch(incomingRequestsStreamProvider).value ??
+          const <FriendshipEntity>[]),
+      ...(ref.watch(outgoingRequestsStreamProvider).value ??
+          const <FriendshipEntity>[]),
+    ];
+
+    for (final friendship in allRelationships) {
+      final isSamePair =
+          (friendship.user1Id == currentUserId &&
+              friendship.user2Id == user.uid) ||
+          (friendship.user2Id == currentUserId &&
+              friendship.user1Id == user.uid);
+      if (isSamePair) return friendship;
+    }
+
+    return null;
+  }
+
+  Future<void> _sendFriendRequest(BuildContext context, WidgetRef ref) async {
+    final ok = await ref
+        .read(friendActionNotifierProvider.notifier)
+        .sendFriendRequest(user.uid);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'Friend request sent' : 'Could not send request'),
+        backgroundColor: ok ? AppColors.green : AppColors.red,
+      ),
+    );
+  }
+
+  Future<void> _acceptFriendRequest(
+    BuildContext context,
+    WidgetRef ref,
+    String friendshipId,
+  ) async {
+    final ok = await ref
+        .read(friendActionNotifierProvider.notifier)
+        .acceptFriendRequest(friendshipId);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? 'Friend request accepted' : 'Could not accept request',
+        ),
+        backgroundColor: ok ? AppColors.green : AppColors.red,
+      ),
+    );
+  }
+
+  Future<void> _openDirectMessage(BuildContext context, WidgetRef ref) async {
+    final chatId = await ref
+        .read(dmChatNotifierProvider.notifier)
+        .openDmWith(user.uid);
+    if (chatId == null) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open direct message'),
+          backgroundColor: AppColors.red,
+        ),
+      );
+      return;
+    }
+
+    ref.read(selectedServerIdProvider.notifier).state = null;
+    ref.read(selectedChannelIdProvider.notifier).state = null;
+    ref.read(selectedDmChatIdProvider.notifier).state = chatId;
+    ref.read(selectedServerNameProvider.notifier).state = 'Direct Messages';
+
+    if (context.mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
   Widget _buildBannerWithAvatar() {
     return SizedBox(
-      height: 100,
+      height: 124,
       width: double.infinity,
       child: Stack(
-        clipBehavior: Clip.none,
+        clipBehavior: Clip.hardEdge,
         children: [
           // Banner background — gradient pattern (Discord-style)
           Container(
-            height: 80,
+            height: 96,
             width: double.infinity,
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -371,52 +458,32 @@ class UserProfileModal extends StatelessWidget {
           ),
           // Avatar — positioned overlapping banner
           Positioned(
-            left: 16,
-            bottom: -20,
-            child: Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.bgTertiary,
-                border: Border.all(color: AppColors.bgFloating, width: 4),
-              ),
-              child: ClipOval(
-                child: user.avatarUrl.isNotEmpty
-                    ? Image.network(
-                        user.avatarUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildInitialAvatar(80),
-                        loadingBuilder: (_, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                color: AppColors.white,
-                                strokeWidth: 2,
-                              ),
-                            ),
-                          );
-                        },
-                      )
-                    : _buildInitialAvatar(80),
+            left: 20,
+            bottom: 10,
+            child: AppAvatar(
+              imageUrl: user.avatarUrl,
+              displayName: user.username,
+              size: 76,
+              backgroundColor: AppColors.bgTertiary,
+              textStyle: const TextStyle(
+                color: AppColors.white,
+                fontSize: 30,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
           // Status dot on avatar
           Positioned(
-            left: 72,
-            bottom: -16,
-            child: _buildStatusDot(size: 18, hasBorder: true),
+            left: 82,
+            bottom: 14,
+            child: _buildStatusDot(size: 16, hasBorder: true),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInitialAvatar(double size) {
+  Widget buildInitialAvatar(double size) {
     return Container(
       width: size,
       height: size,
@@ -496,6 +563,6 @@ class UserProfileModal extends StatelessWidget {
       'Tháng 11',
       'Tháng 12',
     ];
-    return '${date.day} ${months[date.month]}, ${date.year}';
+    return '${months[date.month]} ${date.day}, ${date.year}';
   }
 }

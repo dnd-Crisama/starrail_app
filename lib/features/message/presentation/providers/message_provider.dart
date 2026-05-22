@@ -70,7 +70,7 @@ final channelMessagesStreamProvider =
       return repo.getMessagesStream(
         serverId: params.serverId,
         channelId: params.channelId,
-        limit: 30,
+        limit: 80,
       );
     });
 
@@ -154,7 +154,7 @@ final channelUnreadCountProvider =
           final lastReadIndex = messages.indexWhere(
             (m) => m.messageId == lastReadId,
           );
-          if (lastReadIndex < 0) return 0;
+          if (lastReadIndex < 0) return messages.length;
           return messages.length - 1 - lastReadIndex;
         },
         loading: () => 0,

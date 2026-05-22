@@ -29,6 +29,8 @@ class CloudinaryStorageDatasource implements StorageRemoteDatasource {
       final formData = FormData.fromMap({
         'upload_preset': _uploadPreset,
         'file': MultipartFile.fromBytes(bytes, filename: imageFile.name),
+        'quality': 'auto:good',
+        'flags': 'lossy',
       });
 
       // 3. Gửi request bằng Dio

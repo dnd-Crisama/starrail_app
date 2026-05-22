@@ -75,6 +75,7 @@ class ReplyPreview extends StatelessWidget {
                           ? DecorationImage(
                               image: NetworkImage(avatarUrl!),
                               fit: BoxFit.cover,
+                              filterQuality: FilterQuality.high,
                             )
                           : null,
                     ),

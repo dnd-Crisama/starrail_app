@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_avatar.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/profile_provider.dart';
 import '../../../auth/domain/entities/user_entity.dart';
@@ -1293,30 +1294,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     Color? backgroundColor,
     String? backgroundImage,
   }) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: backgroundColor ?? AppColors.brand,
-        shape: BoxShape.circle,
-        image: backgroundImage != null && backgroundImage.isNotEmpty
-            ? DecorationImage(
-                image: NetworkImage(backgroundImage),
-                fit: BoxFit.cover,
-              )
-            : null,
+    return AppAvatar(
+      imageUrl: backgroundImage ?? '',
+      displayName: displayName,
+      size: size,
+      backgroundColor: backgroundColor ?? AppColors.brand,
+      textStyle: TextStyle(
+        color: AppColors.white,
+        fontSize: size * 0.45,
+        fontWeight: FontWeight.w600,
       ),
-      alignment: Alignment.center,
-      child: backgroundImage == null || backgroundImage.isEmpty
-          ? Text(
-              displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
-              style: TextStyle(
-                color: AppColors.white,
-                fontSize: size * 0.45,
-                fontWeight: FontWeight.w600,
-              ),
-            )
-          : null,
     );
   }
 

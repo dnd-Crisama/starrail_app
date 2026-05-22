@@ -8,13 +8,9 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_avatar.dart';
 import '../../../auth/data/datasources/cloudinary_storage_datasource.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
-import '../../../server/domain/entities/channel_entity.dart';
-import '../../../server/domain/entities/permission.dart';
-import '../../../server/presentation/providers/channel_provider.dart';
-import '../../../server/presentation/providers/role_provider.dart';
-import '../../../server/presentation/providers/server_provider.dart';
 import '../../domain/entities/message_entity.dart';
 import '../providers/message_provider.dart';
 import '../widgets/message_context_menu.dart';
@@ -24,37 +20,6 @@ import '../widgets/reaction_display.dart';
 import '../widgets/delete_confirm_dialog.dart';
 import '../widgets/attachment_display.dart';
 import '../widgets/user_profile_modal.dart';
-
-final _currentMemberRoleIdsProvider =
-    StreamProvider.family<List<String>, ({String serverId, String userId})>((
-      ref,
-      params,
-    ) {
-      if (params.userId.isEmpty) return Stream.value(const <String>[]);
-
-      return FirebaseFirestore.instance
-          .collection('servers')
-          .doc(params.serverId)
-          .collection('members')
-          .doc(params.userId)
-          .snapshots()
-          .asyncMap((doc) async {
-            final roleIds = <String>{
-              ...List<String>.from(doc.data()?['roleIds'] as List? ?? []),
-            };
-            final defaultRole = await FirebaseFirestore.instance
-                .collection('servers')
-                .doc(params.serverId)
-                .collection('roles')
-                .where('isDefault', isEqualTo: true)
-                .limit(1)
-                .get();
-            if (defaultRole.docs.isNotEmpty) {
-              roleIds.add(defaultRole.docs.first.id);
-            }
-            return roleIds.toList();
-          });
-    });
 
 /// Màn hình chat hiển thị danh sách tin nhắn và input gửi tin nhắn
 class ChatScreen extends ConsumerStatefulWidget {
@@ -79,6 +44,12 @@ class _UserData {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
+  static final Map<String, _UserData> _sharedUserDataCache = {};
+  static final Map<String, MessageEntity> _sharedMessageCache = {};
+  static const int _maxSharedUserCacheEntries = 500;
+  static const int _maxSharedMessageCacheEntries = 500;
+  static const double _estimatedMessageHeight = 48;
+
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   final _focusNode = FocusNode();
@@ -97,6 +68,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   // GlobalKey cho mỗi tin nhắn — dùng để scroll chính xác đến vị trí
   final Map<String, GlobalKey> _messageKeys = {};
+  final Map<String, double> _messageHeightCache = {};
 
   // Highlight flash khi navigate đến tin nhắn
   String? _highlightedMessageId;
@@ -104,9 +76,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   // Track previous message count để chỉ auto-scroll khi có tin nhắn mới
   int _previousMessageCount = 0;
+  String? _lastRenderedMessageId;
+  bool _forceScrollToBottomOnNextMessage = false;
 
   // Flag ngăn auto-scroll khi đang navigate đến tin nhắn
   bool _isNavigating = false;
+  int _channelGeneration = 0;
 
   // Read/Unread: lastReadMessageId cho channel hiện tại
   String? _lastReadMessageId;
@@ -115,6 +90,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   // Discord-style: "New Messages" divider — lưu messageId ngay TRƯỚC unread,
   // biến mất khi user đã đọc (markAsRead) hoặc chuyển channel.
   String? _newMessagesDividerAfterId;
+  bool _newMessagesDividerBeforeFirst = false;
   bool _hasSetNewMessagesDivider = false;
 
   // Initial scroll: cuộn đến tin nhắn chưa đọc đầu tiên khi mở channel
@@ -167,12 +143,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     });
 
-    ref.listenManual(messageSearchTargetProvider, (previous, next) {
-      if (next != null && next.isNotEmpty) {
-        _navigateToSearchResult(next);
-      }
-    });
-
     // Lắng nghe vị trí scroll để hiện/ẩn nút "Jump to Present" + "New Messages" banner
     _scrollController.addListener(_onScroll);
 
@@ -194,6 +164,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   /// Reset toàn bộ state khi chuyển sang kênh khác
   void _resetStateForNewChannel() {
+    _channelGeneration++;
+
     // Hủy các timer đang chạy
     _highlightTimer?.cancel();
     _flashTimer?.cancel();
@@ -212,7 +184,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Reset message list state
     _visibleMessages = [];
     _previousMessageCount = 0;
+    _lastRenderedMessageId = null;
+    _forceScrollToBottomOnNextMessage = false;
     _messageKeys.clear();
+    _messageHeightCache.clear();
 
     // Reset highlight state
     _highlightedMessageId = null;
@@ -224,6 +199,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _lastReadMessageId = null;
     _hasLoadedReadStatus = false;
     _newMessagesDividerAfterId = null;
+    _newMessagesDividerBeforeFirst = false;
     _hasSetNewMessagesDivider = false;
     _hasPerformedInitialScroll = false;
     _hasMarkedReadOnView = false;
@@ -267,25 +243,43 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Load read status từ Firestore khi mở channel
   /// Đồng thời load vào UnreadStatusNotifier cho sidebar indicators
   Future<void> _loadReadStatus() async {
+    final generation = _channelGeneration;
+    final serverId = widget.serverId;
+    final channelId = widget.channelId;
+    final key = '$serverId/$channelId';
+    final cachedLastRead = ref
+        .read(unreadStatusNotifierProvider.notifier)
+        .getLastReadMessageId(serverId, channelId);
+
+    if (cachedLastRead != null && mounted) {
+      setState(() {
+        _lastReadMessageId = cachedLastRead;
+      });
+    }
+
     final lastRead = await ref
         .read(messageNotifierProvider.notifier)
-        .getLastReadMessageId(
-          serverId: widget.serverId,
-          channelId: widget.channelId,
-        );
-    final key = '${widget.serverId}/${widget.channelId}';
+        .getLastReadMessageId(serverId: serverId, channelId: channelId);
 
-    if (mounted && lastRead != null) {
+    if (!mounted ||
+        generation != _channelGeneration ||
+        serverId != widget.serverId ||
+        channelId != widget.channelId) {
+      return;
+    }
+
+    final effectiveLastRead = lastRead ?? cachedLastRead;
+    if (effectiveLastRead != null) {
       // Cập nhật vào UnreadStatusNotifier (cho sidebar indicators)
       ref.read(unreadStatusNotifierProvider.notifier).state = {
         ...ref.read(unreadStatusNotifierProvider),
-        key: lastRead,
+        key: effectiveLastRead,
       };
       setState(() {
-        _lastReadMessageId = lastRead;
+        _lastReadMessageId = effectiveLastRead;
         _hasLoadedReadStatus = true;
       });
-    } else if (mounted) {
+    } else {
       setState(() => _hasLoadedReadStatus = true);
     }
 
@@ -298,7 +292,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _startChannelViewTimer() {
     _channelViewTimer?.cancel();
     _channelViewTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && !_hasMarkedReadOnView) {
+      if (mounted && !_hasMarkedReadOnView && _isNearBottom()) {
         _hasMarkedReadOnView = true;
         _markAsRead();
       }
@@ -345,6 +339,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (_newMessagesDividerAfterId != null) {
       setState(() {
         _newMessagesDividerAfterId = null;
+        _newMessagesDividerBeforeFirst = false;
+      });
+    } else if (_newMessagesDividerBeforeFirst) {
+      setState(() {
+        _newMessagesDividerBeforeFirst = false;
       });
     }
   }
@@ -358,6 +357,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   /// Lắng nghe scroll position để hiện/ẩn nút "Jump to Present" + "New Messages" banner
   /// + trigger load more khi gần đầu danh sách
+  bool _isNearBottom({double threshold = 100}) {
+    if (!_scrollController.hasClients) return true;
+    final position = _scrollController.position;
+    return position.maxScrollExtent - position.pixels <= threshold;
+  }
+
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     final maxScroll = _scrollController.position.maxScrollExtent;
@@ -376,7 +381,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     // Condition A: Tự đánh dấu đã đọc khi scroll xuống cuối
-    if (maxScroll - currentScroll < 100 && !_isNavigating) {
+    if (_isNearBottom() && !_isNavigating) {
       _markAsRead();
     }
 
@@ -398,18 +403,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   /// Cuộn xuống cuối danh sách tin nhắn
   /// [instant] = true: nhảy ngay không animate (dùng cho initial scroll)
-  void _scrollToBottom({bool instant = false}) {
+  void _scrollToBottom({bool instant = false, int settleFrames = 2}) {
+    final generation = _channelGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        if (instant) {
-          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-        } else {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          );
-        }
+      if (!_scrollController.hasClients ||
+          !mounted ||
+          generation != _channelGeneration) {
+        return;
+      }
+      final target = _scrollController.position.maxScrollExtent;
+      if (instant) {
+        _scrollController.jumpTo(target);
+      } else {
+        _scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+
+      if (settleFrames > 0) {
+        Future<void>.delayed(const Duration(milliseconds: 60), () {
+          if (!mounted || generation != _channelGeneration) return;
+          _scrollToBottom(instant: true, settleFrames: settleFrames - 1);
+        });
       }
     });
   }
@@ -419,39 +436,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return _messageKeys.putIfAbsent(messageId, () => GlobalKey());
   }
 
-  void _jumpNearMessageIndex(int targetIndex) {
-    if (!_scrollController.hasClients || _visibleMessages.isEmpty) return;
-
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    if (maxScroll <= 0) return;
-
-    final ratio = _visibleMessages.length == 1
-        ? 0.0
-        : targetIndex / (_visibleMessages.length - 1);
-    final estimatedOffset = maxScroll * ratio;
-    _scrollController.jumpTo(estimatedOffset.clamp(0.0, maxScroll).toDouble());
-  }
-
   /// Cuộn đến tin nhắn theo ID (dùng khi click reply preview)
   /// Sử dụng GlobalKey + Scrollable.ensureVisible để scroll chính xác
-  void _scrollToMessage(String messageId, {bool allowEstimatedJump = true}) {
+  void _scrollToMessage(
+    String messageId, {
+    double alignment = 0.3,
+    bool highlight = true,
+    int attempt = 0,
+  }) {
     final key = _messageKeys[messageId];
     if (key?.currentContext == null) {
+      // Key chưa mount — thử tìm trong visible messages và đợi frame tiếp theo
       final targetIndex = _visibleMessages.indexWhere(
         (m) => m.messageId == messageId,
       );
       if (targetIndex < 0) return;
-
-      if (allowEstimatedJump) {
-        _jumpNearMessageIndex(targetIndex);
-      }
-
+      _jumpNearMessageIndex(targetIndex);
+      if (attempt > 8) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final hasContext = _messageKeys[messageId]?.currentContext != null;
-        if (hasContext || allowEstimatedJump) {
-          _scrollToMessage(messageId, allowEstimatedJump: false);
-        }
+        _scrollToMessage(
+          messageId,
+          alignment: alignment,
+          highlight: highlight,
+          attempt: attempt + 1,
+        );
       });
       return;
     }
@@ -460,60 +468,81 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _isNavigating = true;
 
     // Bật highlight flash
-    setState(() {
-      _highlightedMessageId = messageId;
-    });
-    _highlightTimer?.cancel();
-    _highlightTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _highlightedMessageId = null;
-        });
-        _isNavigating = false;
-      }
-    });
+    if (highlight) {
+      setState(() {
+        _highlightedMessageId = messageId;
+      });
+      _highlightTimer?.cancel();
+      _highlightTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _highlightedMessageId = null;
+          });
+          _isNavigating = false;
+        }
+      });
+    } else {
+      _highlightTimer?.cancel();
+      _highlightedMessageId = null;
+      Timer(const Duration(milliseconds: 350), () {
+        if (mounted) _isNavigating = false;
+      });
+    }
 
     // Scroll chính xác đến widget sử dụng ensureVisible
     Scrollable.ensureVisible(
       key!.currentContext!,
-      alignment: 0.3, // Đặt tin nhắn ở vị trí 30% từ trên xuống viewport
+      alignment: alignment,
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
     );
   }
 
-  Future<void> _navigateToSearchResult(String messageId) async {
-    _isNavigating = true;
-
-    for (var attempt = 0; attempt < 20; attempt++) {
-      if (_visibleMessages.any((m) => m.messageId == messageId)) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final targetIndex = _visibleMessages.indexWhere(
-            (m) => m.messageId == messageId,
-          );
-          if (targetIndex >= 0) {
-            _jumpNearMessageIndex(targetIndex);
-          }
-          _scrollToMessage(messageId);
-        });
-        ref.read(messageSearchTargetProvider.notifier).state = null;
-        return;
-      }
-
-      if (!_hasMoreMessages || _visibleMessages.isEmpty) break;
-      await _loadMoreMessages();
-      await Future<void>.delayed(const Duration(milliseconds: 80));
-      if (!mounted) return;
-    }
-
-    _isNavigating = false;
-    ref.read(messageSearchTargetProvider.notifier).state = null;
-    ref
-        .read(flashMessageProvider.notifier)
-        .showInfo('Không thể mở tin nhắn trong danh sách hiện tại');
+  /// Gửi tin nhắn — có thể kèm reply và attachments
+  void _jumpNearMessageIndex(int targetIndex) {
+    if (!_scrollController.hasClients || _visibleMessages.isEmpty) return;
+    final offset = _estimateScrollOffsetForIndex(targetIndex);
+    _scrollController.jumpTo(
+      offset.clamp(0.0, _scrollController.position.maxScrollExtent),
+    );
   }
 
-  /// Gửi tin nhắn — có thể kèm reply và attachments
+  double _estimateScrollOffsetForIndex(int targetIndex) {
+    var offset = 8.0;
+    for (var i = 0; i < targetIndex && i < _visibleMessages.length; i++) {
+      final message = _visibleMessages[i];
+      offset +=
+          _messageHeightCache[message.messageId] ??
+          _estimateMessageHeight(message, i);
+    }
+
+    if (_newMessagesDividerAfterId != null) {
+      final dividerAfterIndex = _visibleMessages.indexWhere(
+        (m) => m.messageId == _newMessagesDividerAfterId,
+      );
+      if (dividerAfterIndex >= 0 && dividerAfterIndex < targetIndex) {
+        offset += 34;
+      }
+    }
+
+    if (_isLoadingMore) offset += 52;
+    return offset;
+  }
+
+  double _estimateMessageHeight(MessageEntity message, int index) {
+    var height = _shouldShowAvatar(_visibleMessages, index) ? 58.0 : 30.0;
+    if (message.replyToMessageId != null) height += 28;
+    if (message.content.isNotEmpty) {
+      final extraLines = (message.content.length / 70).floor();
+      height += extraLines * 18;
+    }
+    if (message.attachments.isNotEmpty) {
+      height += message.attachments.any((a) => a.isImage) ? 180 : 72;
+    }
+    if (message.reactions.isNotEmpty) height += 30;
+    return height.clamp(_estimatedMessageHeight, 320.0).toDouble();
+  }
+
   void _sendMessage() {
     final content = _messageController.text.trim();
     final hasAttachments = _pendingAttachments.isNotEmpty;
@@ -541,6 +570,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     // Gửi tin nhắn mới
     final replyTo = ref.read(replyingToProvider);
+    _isNavigating = false;
+    _forceScrollToBottomOnNextMessage = true;
 
     ref
         .read(messageNotifierProvider.notifier)
@@ -553,7 +584,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         );
 
     _messageController.clear();
-    _pendingAttachments = [];
+    setState(() => _pendingAttachments = []);
     ref.read(replyingToProvider.notifier).state = null;
     _focusNode.requestFocus();
   }
@@ -625,6 +656,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               onTap: () async {
                 final xFile = await picker.pickImage(
                   source: ImageSource.gallery,
+                  maxWidth: 1920,
+                  maxHeight: 1920,
+                  imageQuality: 90,
                 );
                 if (context.mounted) Navigator.of(context).pop(xFile);
               },
@@ -635,6 +669,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               onTap: () async {
                 final xFile = await picker.pickImage(
                   source: ImageSource.camera,
+                  maxWidth: 1920,
+                  maxHeight: 1920,
+                  imageQuality: 90,
                 );
                 if (context.mounted) Navigator.of(context).pop(xFile);
               },
@@ -699,8 +736,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Lấy tin nhắn gốc cho reply preview (cache để giảm Firestore reads)
   Future<MessageEntity?> _getRepliedMessage(MessageEntity message) async {
     if (message.replyToMessageId == null) return null;
-    if (_repliedMessageCache.containsKey(message.replyToMessageId)) {
-      return _repliedMessageCache[message.replyToMessageId];
+    final cacheKey =
+        '${widget.serverId}/${widget.channelId}/${message.replyToMessageId}';
+    if (_repliedMessageCache.containsKey(cacheKey)) {
+      return _repliedMessageCache[cacheKey];
+    }
+    if (_sharedMessageCache.containsKey(cacheKey)) {
+      final cached = _sharedMessageCache[cacheKey]!;
+      _repliedMessageCache[cacheKey] = cached;
+      return cached;
+    }
+    for (final visibleMessage in _visibleMessages) {
+      if (visibleMessage.messageId == message.replyToMessageId) {
+        _cacheMessage(cacheKey, visibleMessage);
+        return visibleMessage;
+      }
     }
     final replied = await ref
         .read(messageNotifierProvider.notifier)
@@ -710,9 +760,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           messageId: message.replyToMessageId!,
         );
     if (replied != null) {
-      _repliedMessageCache[message.replyToMessageId!] = replied;
+      _cacheMessage(cacheKey, replied);
     }
     return replied;
+  }
+
+  void _cacheMessage(String key, MessageEntity message) {
+    _repliedMessageCache[key] = message;
+    _sharedMessageCache[key] = message;
+    if (_sharedMessageCache.length > _maxSharedMessageCacheEntries) {
+      _sharedMessageCache.remove(_sharedMessageCache.keys.first);
+    }
   }
 
   /// Fetch user data (username + avatarUrl) từ Firestore, có cache
@@ -720,13 +778,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (_userDataCache.containsKey(senderId)) {
       return _userDataCache[senderId]!;
     }
+    if (_sharedUserDataCache.containsKey(senderId)) {
+      final cached = _sharedUserDataCache[senderId]!;
+      _userDataCache[senderId] = cached;
+      return cached;
+    }
     final user = ref.read(authNotifierProvider).user;
     if (user?.uid == senderId) {
       final data = _UserData(
         username: user?.username ?? 'Bạn',
         avatarUrl: user?.avatarUrl ?? '',
       );
-      _userDataCache[senderId] = data;
+      _cacheUserData(senderId, data);
       return data;
     }
 
@@ -741,24 +804,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           username: doc.data()?['username'] as String? ?? 'Người dùng',
           avatarUrl: doc.data()?['avatarUrl'] as String? ?? '',
         );
-        _userDataCache[senderId] = data;
+        _cacheUserData(senderId, data);
         return data;
       }
     } catch (_) {}
     return _UserData(username: 'Người dùng', avatarUrl: '');
   }
 
+  void _cacheUserData(String userId, _UserData data) {
+    _userDataCache[userId] = data;
+    _sharedUserDataCache[userId] = data;
+    if (_sharedUserDataCache.length > _maxSharedUserCacheEntries) {
+      _sharedUserDataCache.remove(_sharedUserDataCache.keys.first);
+    }
+  }
+
   /// Lấy tên sender đồng bộ từ cache
   String _getSenderNameSync(String senderId) {
     final user = ref.read(authNotifierProvider).user;
     if (user?.uid == senderId) return user?.username ?? 'Bạn';
-    return _userDataCache[senderId]?.username ?? 'Người dùng';
+    return _userDataCache[senderId]?.username ??
+        _sharedUserDataCache[senderId]?.username ??
+        'Người dùng';
   }
 
   /// Preload user data vào cache
   void _preloadUserData(String senderId) {
-    if (!_userDataCache.containsKey(senderId)) {
+    if (!_userDataCache.containsKey(senderId) &&
+        !_sharedUserDataCache.containsKey(senderId)) {
       _getUserData(senderId);
+    }
+  }
+
+  void _preloadVisibleUserData(List<MessageEntity> messages) {
+    final ids = messages.map((m) => m.senderId).toSet();
+    for (final id in ids) {
+      _preloadUserData(id);
     }
   }
 
@@ -770,75 +851,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return false;
   }
 
-  ChannelEntity? _findCurrentChannel(List<ChannelEntity> channels) {
-    for (final channel in channels) {
-      if (channel.channelId == widget.channelId) return channel;
-    }
-    return null;
-  }
-
-  bool _canSendMessages({
-    required AsyncValue<bool> serverCanSendMessagesAsync,
-    required AsyncValue<List<ChannelEntity>> channelsAsync,
-    required AsyncValue<List<String>> memberRoleIdsAsync,
-    required bool isServerOwner,
-  }) {
-    final hasServerSendPermission = serverCanSendMessagesAsync.maybeWhen(
-      data: (value) => value,
-      orElse: () => false,
-    );
-    if (!hasServerSendPermission) return false;
-
-    final allowedSendRoleIds = channelsAsync.maybeWhen(
-      data: (channels) {
-        final channel = _findCurrentChannel(channels);
-        return channel?.allowedSendRoleIds ?? const <String>[];
-      },
-      orElse: () => const <String>[],
-    );
-
-    if (allowedSendRoleIds.isEmpty || isServerOwner) return true;
-
-    final memberRoleIds = memberRoleIdsAsync.maybeWhen(
-      data: (roleIds) => roleIds,
-      orElse: () => const <String>[],
-    );
-    return memberRoleIds.any(allowedSendRoleIds.contains);
-  }
-
-  bool _isCheckingSendPermission({
-    required AsyncValue<bool> serverCanSendMessagesAsync,
-    required AsyncValue<List<ChannelEntity>> channelsAsync,
-    required AsyncValue<List<String>> memberRoleIdsAsync,
-  }) {
-    final isServerPermissionLoading = serverCanSendMessagesAsync.maybeWhen(
-      loading: () => true,
-      orElse: () => false,
-    );
-    final isChannelsLoading = channelsAsync.maybeWhen(
-      loading: () => true,
-      orElse: () => false,
-    );
-    if (isServerPermissionLoading || isChannelsLoading) {
-      return true;
-    }
-
-    final allowedSendRoleIds = channelsAsync.maybeWhen(
-      data: (channels) {
-        final channel = _findCurrentChannel(channels);
-        return channel?.allowedSendRoleIds ?? const <String>[];
-      },
-      orElse: () => const <String>[],
-    );
-
-    final isMemberRolesLoading = memberRoleIdsAsync.maybeWhen(
-      loading: () => true,
-      orElse: () => false,
-    );
-
-    return allowedSendRoleIds.isNotEmpty && isMemberRolesLoading;
-  }
-
   @override
   Widget build(BuildContext context) {
     final messagesAsync = ref.watch(
@@ -848,72 +860,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       )),
     );
     final messageState = ref.watch(messageNotifierProvider);
-    final currentUserId =
-        ref.watch(authNotifierProvider.select((state) => state.user?.uid)) ??
-        '';
+    final currentUserId = ref.read(authNotifierProvider).user?.uid ?? '';
     final replyingTo = ref.watch(replyingToProvider);
     final editingMessage = ref.watch(editingMessageProvider);
     final flashState = ref.watch(flashMessageProvider);
-    final serverCanSendMessagesAsync = currentUserId.isEmpty
-        ? const AsyncValue<bool>.data(false)
-        : ref.watch(
-            hasPermissionProvider((
-              serverId: widget.serverId,
-              userId: currentUserId,
-              permission: Permission.sendMessages,
-            )),
-          );
-    final canDeleteMessagesAsync = currentUserId.isEmpty
-        ? const AsyncValue<bool>.data(false)
-        : ref.watch(
-            hasPermissionProvider((
-              serverId: widget.serverId,
-              userId: currentUserId,
-              permission: Permission.deleteMessages,
-            )),
-          );
-    final canEditMessagesAsync = currentUserId.isEmpty
-        ? const AsyncValue<bool>.data(false)
-        : ref.watch(
-            hasPermissionProvider((
-              serverId: widget.serverId,
-              userId: currentUserId,
-              permission: Permission.editMessages,
-            )),
-          );
-    final channelsAsync = ref.watch(
-      serverChannelsStreamProvider(widget.serverId),
-    );
-    final memberRoleIdsAsync = ref.watch(
-      _currentMemberRoleIdsProvider((
-        serverId: widget.serverId,
-        userId: currentUserId,
-      )),
-    );
-    final isServerOwner = ref.watch(isServerOwnerProvider(widget.serverId));
-    final canSendMessages = _canSendMessages(
-      serverCanSendMessagesAsync: serverCanSendMessagesAsync,
-      channelsAsync: channelsAsync,
-      memberRoleIdsAsync: memberRoleIdsAsync,
-      isServerOwner: isServerOwner,
-    );
-    final canDeleteMessages =
-        isServerOwner ||
-        canDeleteMessagesAsync.maybeWhen(
-          data: (value) => value,
-          orElse: () => false,
-        );
-    final canEditMessages =
-        isServerOwner ||
-        canEditMessagesAsync.maybeWhen(
-          data: (value) => value,
-          orElse: () => false,
-        );
-    final isCheckingSendPermission = _isCheckingSendPermission(
-      serverCanSendMessagesAsync: serverCanSendMessagesAsync,
-      channelsAsync: channelsAsync,
-      memberRoleIdsAsync: memberRoleIdsAsync,
-    );
 
     // ESC key handler — scroll to bottom khi nhấn ESC
     // Shift+ESC — đánh dấu đã đọc ngay lập tức (Condition C)
@@ -939,7 +889,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           Column(
             children: [
               // Reply bar (hiển thị khi đang reply)
-              if (canSendMessages && replyingTo != null)
+              if (replyingTo != null)
                 ReplyBar(
                   currentUserId: currentUserId,
                   onNavigateToMessage: () {
@@ -961,40 +911,44 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       streamMessages,
                     );
 
-                    // Auto-scroll chỉ khi có tin nhắn MỚI được thêm (không phải load more)
-                    // và không đang navigate đến tin nhắn cũ
+                    final wasNearBottom = _isNearBottom(threshold: 180);
+                    final previousLastMessageId = _lastRenderedMessageId;
+                    final nextLastMessageId = visibleMessages.isNotEmpty
+                        ? visibleMessages.last.messageId
+                        : null;
+                    final hasNewLatest =
+                        nextLastMessageId != null &&
+                        previousLastMessageId != null &&
+                        nextLastMessageId != previousLastMessageId;
+                    final latestIsOwnMessage =
+                        visibleMessages.isNotEmpty &&
+                        visibleMessages.last.senderId == currentUserId;
+
                     final newCount = visibleMessages.length;
-                    if (newCount > _previousMessageCount &&
-                        !_isNavigating &&
-                        !_isLoadingMore &&
-                        _previousMessageCount > 0) {
-                      _scrollToBottom();
-                      // Đánh dấu đã đọc khi có tin nhắn mới và đang ở cuối
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (_scrollController.hasClients) {
-                          final maxScroll =
-                              _scrollController.position.maxScrollExtent;
-                          final currentScroll =
-                              _scrollController.position.pixels;
-                          if (maxScroll - currentScroll < 100) {
-                            _markAsRead();
-                          }
-                        }
-                      });
-                    }
                     _previousMessageCount = newCount;
+                    _lastRenderedMessageId = nextLastMessageId;
+                    _visibleMessages = visibleMessages;
 
                     if (visibleMessages.isEmpty) {
                       return _buildEmptyState();
                     }
 
-                    _visibleMessages = visibleMessages;
-                    return _buildMessageList(
-                      visibleMessages,
-                      currentUserId,
-                      canDeleteMessages: canDeleteMessages,
-                      canEditMessages: canEditMessages,
-                    );
+                    _preloadVisibleUserData(visibleMessages);
+
+                    if (hasNewLatest && !_isNavigating && !_isLoadingMore) {
+                      final shouldFollowNewMessage =
+                          _forceScrollToBottomOnNextMessage ||
+                          latestIsOwnMessage ||
+                          wasNearBottom;
+                      if (shouldFollowNewMessage) {
+                        _forceScrollToBottomOnNextMessage = false;
+                        _scrollToBottom();
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (_isNearBottom(threshold: 140)) _markAsRead();
+                        });
+                      }
+                    }
+                    return _buildMessageList(visibleMessages, currentUserId);
                   },
                   loading: () => const Center(
                     child: SizedBox(
@@ -1026,12 +980,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
               ),
               // Input bar
-              _buildComposerArea(
-                canSendMessages: canSendMessages,
-                isCheckingSendPermission: isCheckingSendPermission,
-                messageState: messageState,
-                editingMessage: editingMessage,
-              ),
+              _buildInputBar(messageState, editingMessage),
             ],
           ),
 
@@ -1055,68 +1004,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   /// Flash message overlay — hiển thị thông báo tạm thời trên màn hình
-  Widget _buildComposerArea({
-    required bool canSendMessages,
-    required bool isCheckingSendPermission,
-    required MessageState messageState,
-    required MessageEntity? editingMessage,
-  }) {
-    if (isCheckingSendPermission) {
-      return _buildCheckingPermissionComposer();
-    }
-    if (!canSendMessages) {
-      return _buildNoPermissionComposer();
-    }
-    return _buildInputBar(messageState, editingMessage);
-  }
-
-  Widget _buildCheckingPermissionComposer() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      decoration: BoxDecoration(
-        color: AppColors.inputBackground,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          const SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(
-              color: AppColors.interactiveNormal,
-              strokeWidth: 2,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            'Dang kiem tra quyen nhan tin...',
-            style: AppTextStyles.bodySecondary.copyWith(
-              color: AppColors.textMuted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNoPermissionComposer() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      decoration: BoxDecoration(
-        color: AppColors.inputBackground,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        'Bạn không có quyền nhắn tin vào kênh này',
-        style: AppTextStyles.bodySecondary.copyWith(color: AppColors.textMuted),
-      ),
-    );
-  }
-
   Widget _buildFlashMessage(FlashMessageState flashState) {
     final message = flashState.currentMessage!;
     final color = _flashMessageColor(message.type);
@@ -1274,7 +1161,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Dùng khi mở unread channel hoặc nhấn banner "Bạn có tin nhắn chưa đọc"
   /// Sử dụng two-phase approach: estimate jump → ensureVisible
   void _scrollToFirstUnread() {
-    if (_newMessagesDividerAfterId == null) return;
+    if (_newMessagesDividerAfterId == null && !_newMessagesDividerBeforeFirst) {
+      return;
+    }
+    if (_newMessagesDividerBeforeFirst) {
+      if (_visibleMessages.isEmpty) return;
+      final targetMessageId = _visibleMessages.first.messageId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToMessage(targetMessageId, alignment: 0.12, highlight: false);
+      });
+      return;
+    }
     // Tìm message ngay sau divider
     final dividerIndex = _visibleMessages.indexWhere(
       (m) => m.messageId == _newMessagesDividerAfterId,
@@ -1287,12 +1184,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Phase 1: Ước lượng vị trí scroll và nhảy đến đó
     // Điều này đảm bảo ListView xây dựng target message trong viewport
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _jumpNearMessageIndex(targetIndex);
-
-      // Phase 2: Sau khi target message được xây dựng, cuộn chính xác với ensureVisible
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToMessage(targetMessageId);
-      });
+      _scrollToMessage(targetMessageId, alignment: 0.12, highlight: false);
     });
   }
 
@@ -1373,7 +1265,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final lastReadIndex = _visibleMessages.indexWhere(
       (m) => m.messageId == _lastReadMessageId,
     );
-    if (lastReadIndex < 0) return 0;
+    if (lastReadIndex < 0) return _visibleMessages.length;
     return _visibleMessages.length - 1 - lastReadIndex;
   }
 
@@ -1410,12 +1302,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   /// Danh sách tin nhắn
-  Widget _buildMessageList(
-    List<MessageEntity> messages,
-    String currentUserId, {
-    required bool canDeleteMessages,
-    required bool canEditMessages,
-  }) {
+  Widget _buildMessageList(List<MessageEntity> messages, String currentUserId) {
     // Discord-style: "New Messages" divider
     // Được set MỘT LẦN khi mở unread channel, biến mất khi markAsRead
     if (_hasLoadedReadStatus &&
@@ -1427,6 +1314,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (lastReadIndex >= 0 && lastReadIndex < messages.length - 1) {
         // Chèn divider sau tin nhắn đã đọc cuối cùng
         _newMessagesDividerAfterId = messages[lastReadIndex].messageId;
+      } else if (lastReadIndex < 0 && messages.isNotEmpty) {
+        _newMessagesDividerBeforeFirst = true;
       }
       _hasSetNewMessagesDivider = true;
     }
@@ -1438,7 +1327,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         !_hasPerformedInitialScroll &&
         messages.isNotEmpty) {
       _hasPerformedInitialScroll = true;
-      if (_newMessagesDividerAfterId != null) {
+      if (_newMessagesDividerAfterId != null ||
+          _newMessagesDividerBeforeFirst) {
         // Có tin nhắn chưa đọc → cuộn đến first unread message (two-phase)
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _scrollToFirstUnread();
@@ -1453,7 +1343,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     // Tìm vị trí divider trong danh sách hiện tại
     int? newMessagesDividerIndex;
-    if (_newMessagesDividerAfterId != null) {
+    if (_newMessagesDividerBeforeFirst) {
+      newMessagesDividerIndex = 0;
+    } else if (_newMessagesDividerAfterId != null) {
       final dividerAfterIndex = messages.indexWhere(
         (m) => m.messageId == _newMessagesDividerAfterId,
       );
@@ -1471,7 +1363,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.only(top: 8, bottom: 8),
-      cacheExtent: 500, // Tăng cache extent để ensureVisible hoạt động tốt hơn
+      cacheExtent: 1200,
       itemCount: totalItems,
       itemBuilder: (context, index) {
         // Loading spinner ở đầu danh sách (pagination)
@@ -1498,54 +1390,53 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         final isHighlighted = _highlightedMessageId == message.messageId;
         final messageKey = _getMessageKey(message.messageId);
 
-        return _MessageRow(
+        return _MeasuredMessageItem(
           key: messageKey,
-          message: message,
-          isOwnMessage: isOwnMessage,
-          canEdit: isOwnMessage || canEditMessages,
-          canDelete: isOwnMessage || canDeleteMessages,
-          showAvatar: showAvatar,
-          currentUserId: currentUserId,
-          isMentioned: isMentioned,
-          isHighlighted: isHighlighted,
-          onAction: (action) => _handleMessageAction(action, message),
-          onQuickReaction: (emoji) {
-            ref
-                .read(messageNotifierProvider.notifier)
-                .toggleReaction(
-                  serverId: widget.serverId,
-                  channelId: widget.channelId,
-                  messageId: message.messageId,
-                  emoji: emoji,
-                );
+          onHeightChanged: (height) {
+            _messageHeightCache[message.messageId] = height;
           },
-          onReactionTapped: (emoji) {
-            ref
-                .read(messageNotifierProvider.notifier)
-                .toggleReaction(
-                  serverId: widget.serverId,
-                  channelId: widget.channelId,
-                  messageId: message.messageId,
-                  emoji: emoji,
-                );
-          },
-          getSenderName: () =>
-              _getUserData(message.senderId).then((u) => u.username),
-          getSenderNameSync: () => _getSenderNameSync(message.senderId),
-          getSenderAvatar: () =>
-              _getUserData(message.senderId).then((u) => u.avatarUrl),
-          getRepliedMessage: () => _getRepliedMessage(message),
-          getUserDataCache: _userDataCache,
-          onUserTap: () {
-            UserProfileModal.showFromUid(
-              context,
-              uid: message.senderId,
-              serverId: widget.serverId,
-            );
-          },
-          onNavigateToMessage: (messageId) {
-            _scrollToMessage(messageId);
-          },
+          child: _MessageRow(
+            message: message,
+            isOwnMessage: isOwnMessage,
+            showAvatar: showAvatar,
+            currentUserId: currentUserId,
+            isMentioned: isMentioned,
+            isHighlighted: isHighlighted,
+            onAction: (action) => _handleMessageAction(action, message),
+            onQuickReaction: (emoji) {
+              ref
+                  .read(messageNotifierProvider.notifier)
+                  .toggleReaction(
+                    serverId: widget.serverId,
+                    channelId: widget.channelId,
+                    messageId: message.messageId,
+                    emoji: emoji,
+                  );
+            },
+            onReactionTapped: (emoji) {
+              ref
+                  .read(messageNotifierProvider.notifier)
+                  .toggleReaction(
+                    serverId: widget.serverId,
+                    channelId: widget.channelId,
+                    messageId: message.messageId,
+                    emoji: emoji,
+                  );
+            },
+            getSenderName: () =>
+                _getUserData(message.senderId).then((u) => u.username),
+            getSenderNameSync: () => _getSenderNameSync(message.senderId),
+            getSenderAvatar: () =>
+                _getUserData(message.senderId).then((u) => u.avatarUrl),
+            getRepliedMessage: () => _getRepliedMessage(message),
+            getUserDataCache: _userDataCache,
+            onUserTap: () {
+              UserProfileModal.showFromUid(context, uid: message.senderId);
+            },
+            onNavigateToMessage: (messageId) {
+              _scrollToMessage(messageId);
+            },
+          ),
         );
       },
     );
@@ -1614,6 +1505,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Tải thêm tin nhắn cũ hơn khi scroll lên đầu (pagination)
   Future<void> _loadMoreMessages() async {
     if (_isLoadingMore || !_hasMoreMessages || _visibleMessages.isEmpty) return;
+    final generation = _channelGeneration;
+    final serverId = widget.serverId;
+    final channelId = widget.channelId;
 
     // Lưu scroll position để preserve sau khi prepend messages
     if (_scrollController.hasClients) {
@@ -1629,13 +1523,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final olderMessages = await ref
         .read(messageNotifierProvider.notifier)
         .getMessagesBefore(
-          serverId: widget.serverId,
-          channelId: widget.channelId,
+          serverId: serverId,
+          channelId: channelId,
           before: oldestMessage.createdAt,
           limit: 30,
         );
 
-    if (mounted) {
+    if (mounted &&
+        generation == _channelGeneration &&
+        serverId == widget.serverId &&
+        channelId == widget.channelId) {
       setState(() {
         _isLoadingMore = false;
         if (olderMessages.isEmpty) {
@@ -1800,6 +1697,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             child: Image.network(
                               att.url,
                               fit: BoxFit.cover,
+                              filterQuality: FilterQuality.high,
                               errorBuilder: (_, __, ___) => Container(
                                 width: 80,
                                 height: 60,
@@ -1948,11 +1846,54 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 // ──────────────────────────────────────────────────────────────
 /// Một hàng tin nhắn hoàn chỉnh (Discord-style hover, highlight, action toolbar)
 // ──────────────────────────────────────────────────────────────────────
+class _MeasuredMessageItem extends StatefulWidget {
+  final Widget child;
+  final ValueChanged<double> onHeightChanged;
+
+  const _MeasuredMessageItem({
+    super.key,
+    required this.child,
+    required this.onHeightChanged,
+  });
+
+  @override
+  State<_MeasuredMessageItem> createState() => _MeasuredMessageItemState();
+}
+
+class _MeasuredMessageItemState extends State<_MeasuredMessageItem> {
+  double? _lastHeight;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleMeasure();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MeasuredMessageItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _scheduleMeasure();
+  }
+
+  void _scheduleMeasure() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final renderObject = context.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.hasSize) return;
+      final height = renderObject.size.height;
+      if (_lastHeight == height) return;
+      _lastHeight = height;
+      widget.onHeightChanged(height);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 class _MessageRow extends ConsumerStatefulWidget {
   final MessageEntity message;
   final bool isOwnMessage;
-  final bool canEdit;
-  final bool canDelete;
   final bool showAvatar;
   final String currentUserId;
   final bool isMentioned;
@@ -1972,8 +1913,6 @@ class _MessageRow extends ConsumerStatefulWidget {
     super.key,
     required this.message,
     required this.isOwnMessage,
-    required this.canEdit,
-    required this.canDelete,
     required this.showAvatar,
     required this.currentUserId,
     required this.isMentioned,
@@ -2040,97 +1979,115 @@ class _MessageRowState extends ConsumerState<_MessageRow>
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
-      child: Stack(
-        children: [
-          // Message row content
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 100),
-            color: _isHovered
-                ? AppColors.bgModifierHover
-                : widget.isMentioned
-                ? AppColors.brand.withValues(alpha: 0.08)
-                : Colors.transparent,
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 60, // Space for hover toolbar
-              top: widget.showAvatar ? 8 : 2,
-              bottom: widget.showAvatar ? 0 : 2,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Avatar hoặc khoảng trắng
-                _buildAvatarSection(),
-                const SizedBox(width: 16),
-                // Nội dung tin nhắn
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (widget.showAvatar) _buildMessageHeader(),
-                      // Reply preview (nếu tin nhắn này là reply)
-                      if (msg.replyToMessageId != null) _buildReplyPreview(),
-                      // Mention highlight indicator
-                      if (widget.isMentioned) _buildMentionIndicator(),
-                      // Nội dung
-                      if (msg.content.isNotEmpty)
-                        Text(msg.content, style: AppTextStyles.bodySecondary),
-                      // Attachment
-                      if (msg.attachments.isNotEmpty)
-                        AttachmentDisplay(attachments: msg.attachments),
-                      // Chỉnh sửa indicator
-                      if (msg.isEdited)
-                        Text(
-                          '(đã chỉnh sửa)',
-                          style: AppTextStyles.textMutedSmall.copyWith(
-                            fontSize: 10,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onLongPressStart: (details) =>
+            _showContextMenuAt(details.globalPosition),
+        onSecondaryTapDown: (details) =>
+            _showContextMenuAt(details.globalPosition),
+        child: Stack(
+          children: [
+            // Message row content
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 100),
+              color: _isHovered
+                  ? AppColors.bgModifierHover
+                  : widget.isMentioned
+                  ? AppColors.brand.withValues(alpha: 0.08)
+                  : Colors.transparent,
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 60, // Space for hover toolbar
+                top: widget.showAvatar ? 8 : 2,
+                bottom: widget.showAvatar ? 0 : 2,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Avatar hoặc khoảng trắng
+                  _buildAvatarSection(),
+                  const SizedBox(width: 16),
+                  // Nội dung tin nhắn
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (widget.showAvatar) _buildMessageHeader(),
+                        // Reply preview (nếu tin nhắn này là reply)
+                        if (msg.replyToMessageId != null) _buildReplyPreview(),
+                        // Mention highlight indicator
+                        if (widget.isMentioned) _buildMentionIndicator(),
+                        // Nội dung
+                        if (msg.content.isNotEmpty)
+                          Text(msg.content, style: AppTextStyles.bodySecondary),
+                        // Attachment
+                        if (msg.attachments.isNotEmpty)
+                          AttachmentDisplay(attachments: msg.attachments),
+                        // Chỉnh sửa indicator
+                        if (msg.isEdited)
+                          Text(
+                            '(đã chỉnh sửa)',
+                            style: AppTextStyles.textMutedSmall.copyWith(
+                              fontSize: 10,
+                            ),
                           ),
-                        ),
-                      // Reactions
-                      if (msg.reactions.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: ReactionDisplay(
-                            reactions: msg.reactions,
-                            currentUserId: widget.currentUserId,
-                            onReactionTapped: widget.onReactionTapped,
+                        // Reactions
+                        if (msg.reactions.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: ReactionDisplay(
+                              reactions: msg.reactions,
+                              currentUserId: widget.currentUserId,
+                              onReactionTapped: widget.onReactionTapped,
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          // Highlight flash overlay khi navigate đến tin nhắn này
-          if (widget.isHighlighted)
-            FadeTransition(
-              opacity: _highlightAnimation,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.brand.withValues(alpha: 0.15),
-                  border: Border(
-                    left: BorderSide(
-                      color: AppColors.brand.withValues(alpha: 0.6),
-                      width: 3,
+            // Highlight flash overlay khi navigate đến tin nhắn này
+            if (widget.isHighlighted)
+              FadeTransition(
+                opacity: _highlightAnimation,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.brand.withValues(alpha: 0.15),
+                    border: Border(
+                      left: BorderSide(
+                        color: AppColors.brand.withValues(alpha: 0.6),
+                        width: 3,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          // Hover toolbar (Discord-style — hiện khi hover vào message row)
-          if (_isHovered)
-            Positioned(
-              top: widget.showAvatar ? 4 : 0,
-              right: 16,
-              child: _buildHoverToolbar(),
-            ),
-        ],
+            // Hover toolbar (Discord-style — hiện khi hover vào message row)
+            if (_isHovered)
+              Positioned(
+                top: widget.showAvatar ? 4 : 0,
+                right: 16,
+                child: _buildHoverToolbar(),
+              ),
+          ],
+        ),
       ),
     );
   }
 
   /// Discord-style hover toolbar với các icon action
+  void _showContextMenuAt(Offset position) {
+    showMessageContextMenu(
+      context: context,
+      position: position,
+      message: widget.message,
+      isOwnMessage: widget.isOwnMessage,
+      onAction: widget.onAction,
+      onQuickReaction: widget.onQuickReaction,
+    );
+  }
+
   Widget _buildHoverToolbar() {
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -2175,7 +2132,7 @@ class _MessageRowState extends ConsumerState<_MessageRow>
                 tooltip: 'Trả lời',
               ),
               // Edit (only for own messages)
-              if (widget.canEdit)
+              if (widget.isOwnMessage)
                 _toolbarButton(
                   icon: Icons.edit_rounded,
                   onTap: () => widget.onAction(MessageAction.edit),
@@ -2253,28 +2210,27 @@ class _MessageRowState extends ConsumerState<_MessageRow>
             ],
           ),
         ),
-        if (widget.canDelete)
-          PopupMenuItem<String>(
-            value: 'delete',
-            height: 36,
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.delete_outline_rounded,
-                  size: 16,
+        PopupMenuItem<String>(
+          value: 'delete',
+          height: 36,
+          child: Row(
+            children: [
+              const Icon(
+                Icons.delete_outline_rounded,
+                size: 16,
+                color: AppColors.red,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Xóa tin nhắn',
+                style: AppTextStyles.bodySecondary.copyWith(
+                  fontSize: 13,
                   color: AppColors.red,
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Xóa tin nhắn',
-                  style: AppTextStyles.bodySecondary.copyWith(
-                    fontSize: 13,
-                    color: AppColors.red,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
+        ),
       ],
       color: AppColors.bgFloating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
@@ -2462,10 +2418,20 @@ class _AvatarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(onTap: onTap, child: _buildAvatarContent());
+    return FutureBuilder<String>(
+      future: getSenderName(),
+      builder: (context, snapshot) {
+        return AppAvatar(
+          imageUrl: avatarUrl,
+          displayName: snapshot.data ?? senderId,
+          size: size,
+          onTap: onTap,
+        );
+      },
+    );
   }
 
-  Widget _buildAvatarContent() {
+  Widget buildAvatarContent() {
     if (avatarUrl.isNotEmpty) {
       return Container(
         width: size,
@@ -2475,10 +2441,11 @@ class _AvatarWidget extends StatelessWidget {
           child: Image.network(
             avatarUrl,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _buildInitialAvatar(),
+            filterQuality: FilterQuality.high,
+            errorBuilder: (_, __, ___) => buildInitialAvatar(),
             loadingBuilder: (_, child, loadingProgress) {
               if (loadingProgress == null) return child;
-              return _buildLoadingAvatar();
+              return buildLoadingAvatar();
             },
           ),
         ),
@@ -2486,10 +2453,10 @@ class _AvatarWidget extends StatelessWidget {
     }
 
     // Không có avatar URL — hiển thị chữ cái đầu
-    return _buildInitialAvatar();
+    return buildInitialAvatar();
   }
 
-  Widget _buildInitialAvatar() {
+  Widget buildInitialAvatar() {
     return Container(
       width: size,
       height: size,
@@ -2515,7 +2482,7 @@ class _AvatarWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildLoadingAvatar() {
+  Widget buildLoadingAvatar() {
     return Container(
       width: size,
       height: size,

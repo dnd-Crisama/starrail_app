@@ -162,7 +162,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     textInputAction: TextInputAction.next,
                     style: AppTextStyles.inputText,
                     decoration: const InputDecoration(
-                      hintText: 'NguyenVanA',
+                      hintText: 'Tên người dùng',
                       prefixIcon: Icon(
                         Icons.person_outline,
                         color: AppColors.textMuted,

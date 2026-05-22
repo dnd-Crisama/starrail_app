@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../domain/entities/user_entity.dart';
 import '../providers/profile_provider.dart';
 import '../providers/auth_provider.dart';
 
@@ -45,7 +43,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 85,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 90,
     );
 
     if (pickedFile != null) {

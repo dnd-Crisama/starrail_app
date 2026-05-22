@@ -175,6 +175,12 @@ class _ServerIconContent extends StatelessWidget {
             width: 48,
             height: 48,
             fit: BoxFit.cover,
+            filterQuality: FilterQuality.high,
+            isAntiAlias: true,
+            cacheWidth: (48 * MediaQuery.devicePixelRatioOf(context) * 2)
+                .ceil(),
+            cacheHeight: (48 * MediaQuery.devicePixelRatioOf(context) * 2)
+                .ceil(),
             errorBuilder: (_, __, ___) => ServerIconInitial(name: server.name),
           )
         : ServerIconInitial(name: server.name);
