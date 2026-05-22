@@ -5,7 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../home/presentation/providers/home_provider.dart';
+import '../../domain/entities/permission.dart';
+import '../providers/role_provider.dart';
 import '../providers/server_provider.dart';
 import 'role_management_screen.dart';
 import 'channel_management_screen.dart';
@@ -473,29 +476,66 @@ class ServerSettingsScreen extends ConsumerWidget {
     WidgetRef ref,
     String serverId,
   ) {
+    final currentUserId = ref.watch(
+      authNotifierProvider.select((state) => state.user?.uid),
+    );
+    final isOwner = ref.watch(isServerOwnerProvider(serverId));
+    final canManageRoles = currentUserId == null || currentUserId.isEmpty
+        ? false
+        : ref
+              .watch(
+                hasPermissionProvider((
+                  serverId: serverId,
+                  userId: currentUserId,
+                  permission: Permission.manageRoles,
+                )),
+              )
+              .maybeWhen(data: (value) => value, orElse: () => false);
+    final canManageChannels = currentUserId == null || currentUserId.isEmpty
+        ? false
+        : ref
+              .watch(
+                hasPermissionProvider((
+                  serverId: serverId,
+                  userId: currentUserId,
+                  permission: Permission.manageChannel,
+                )),
+              )
+              .maybeWhen(data: (value) => value, orElse: () => false);
+    final showRoleManagement = isOwner || canManageRoles;
+    final showChannelManagement = isOwner || canManageChannels;
+
+    if (!showRoleManagement && !showChannelManagement) {
+      return const SizedBox.shrink();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Quản lý', style: AppTextStyles.header3),
         const SizedBox(height: 8),
-        _buildNavigationItem(
-          icon: Icons.security_outlined,
-          title: 'Quản lý vai trò',
-          subtitle: 'Tạo, sửa, xóa vai trò và phân quyền',
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const RoleManagementScreen()),
+        if (showRoleManagement)
+          _buildNavigationItem(
+            icon: Icons.security_outlined,
+            title: 'Quản lý vai trò',
+            subtitle: 'Tạo, sửa, xóa vai trò và phân quyền',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const RoleManagementScreen()),
+            ),
           ),
-        ),
-        _buildNavigationItem(
-          icon: Icons.tag_outlined,
-          title: 'Quản lý kênh',
-          subtitle: 'Tạo, sửa, xóa kênh văn bản và thoại',
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ChannelManagementScreen()),
+        if (showChannelManagement)
+          _buildNavigationItem(
+            icon: Icons.tag_outlined,
+            title: 'Quản lý kênh',
+            subtitle: 'Tạo, sửa, xóa kênh văn bản và thoại',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ChannelManagementScreen(),
+              ),
+            ),
           ),
-        ),
       ],
     );
   }

@@ -342,7 +342,9 @@ final serverSettingsNotifierProvider =
 
 final isServerOwnerProvider = Provider.family<bool, String>((ref, serverId) {
   final serversAsync = ref.watch(userServersStreamProvider);
-  final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+  final currentUserId = ref.watch(
+    authNotifierProvider.select((state) => state.user?.uid),
+  );
   return serversAsync.maybeWhen(
     data: (servers) {
       final server = servers.where((s) => s.serverId == serverId).firstOrNull;

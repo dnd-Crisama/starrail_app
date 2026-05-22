@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../server/domain/entities/permission.dart';
 import '../../../server/presentation/providers/channel_provider.dart';
 import '../../../server/domain/entities/channel_entity.dart';
@@ -46,7 +46,9 @@ final selectedChannelInfoProvider = Provider<ChannelEntity?>((ref) {
 
 final visibleServerChannelsProvider =
     FutureProvider.family<List<ChannelEntity>, String>((ref, serverId) async {
-      final userId = FirebaseAuth.instance.currentUser?.uid;
+      final userId = ref.watch(
+        authNotifierProvider.select((state) => state.user?.uid),
+      );
       if (userId == null || userId.isEmpty) return const <ChannelEntity>[];
 
       final channels = await ref.watch(
@@ -96,6 +98,41 @@ final visibleServerChannelsProvider =
         if (channel.allowedViewRoleIds.isEmpty) return true;
         return roleIds.any(channel.allowedViewRoleIds.contains);
       }).toList();
+    });
+
+final canSendInChannelProvider =
+    FutureProvider.family<bool, ({String serverId, String channelId})>((
+      ref,
+      params,
+    ) async {
+      final userId = ref.watch(
+        authNotifierProvider.select((state) => state.user?.uid),
+      );
+      if (userId == null || userId.isEmpty) return false;
+
+      final isOwner = ref.watch(isServerOwnerProvider(params.serverId));
+      if (isOwner) return true;
+
+      final canSendInServer = await ref.watch(
+        hasPermissionProvider((
+          serverId: params.serverId,
+          userId: userId,
+          permission: Permission.sendMessages,
+        )).future,
+      );
+      if (!canSendInServer) return false;
+
+      final channels = await ref.watch(
+        serverChannelsStreamProvider(params.serverId).future,
+      );
+      final channel = channels
+          .where((c) => c.channelId == params.channelId)
+          .firstOrNull;
+      if (channel == null) return false;
+      if (channel.allowedSendRoleIds.isEmpty) return true;
+
+      final roleIds = await _currentMemberRoleIds(params.serverId, userId);
+      return roleIds.any(channel.allowedSendRoleIds.contains);
     });
 
 Future<List<String>> _currentMemberRoleIds(

@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/permission.dart';
 import '../../domain/entities/role_entity.dart';
 import '../providers/role_provider.dart';
+import '../providers/server_provider.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 
 class RoleManagementScreen extends ConsumerStatefulWidget {
@@ -35,6 +37,37 @@ class _RoleManagementScreenState extends ConsumerState<RoleManagementScreen> {
           child: Text('Chưa chọn server', style: AppTextStyles.textMuted),
         ),
       );
+    }
+
+    final currentUserId = ref.watch(
+      authNotifierProvider.select((state) => state.user?.uid),
+    );
+    final isOwner = ref.watch(isServerOwnerProvider(serverId));
+    final canManageRoles = currentUserId == null || currentUserId.isEmpty
+        ? const AsyncValue<bool>.data(false)
+        : ref.watch(
+            hasPermissionProvider((
+              serverId: serverId,
+              userId: currentUserId,
+              permission: Permission.manageRoles,
+            )),
+          );
+    if (!isOwner) {
+      final hasAccess = canManageRoles.maybeWhen(
+        data: (value) => value,
+        orElse: () => false,
+      );
+      if (!hasAccess) {
+        if (canManageRoles.isLoading) {
+          return const Scaffold(
+            backgroundColor: AppColors.bgPrimary,
+            body: Center(
+              child: CircularProgressIndicator(color: AppColors.brand),
+            ),
+          );
+        }
+        return _buildAccessDeniedScaffold(context);
+      }
     }
 
     final rolesState = ref.watch(serverRolesStreamProvider(serverId));
@@ -113,6 +146,51 @@ class _RoleManagementScreenState extends ConsumerState<RoleManagementScreen> {
                 ),
                 error: (err, _) => _buildStreamError(err, serverId),
               ),
+      ),
+    );
+  }
+
+  Widget _buildAccessDeniedScaffold(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.bgPrimary,
+      appBar: AppBar(
+        backgroundColor: AppColors.bgTertiary,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back,
+            color: AppColors.interactiveNormal,
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text('Không có quyền', style: AppTextStyles.headerPrimary),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.lock_outline_rounded,
+                color: AppColors.textMuted,
+                size: 48,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Bạn không có quyền quản lý vai trò',
+                style: AppTextStyles.headerSecondary,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Bạn cần quyền Quản lý vai trò hoặc Quản lý server để truy cập trang này.',
+                style: AppTextStyles.textMutedSmall,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

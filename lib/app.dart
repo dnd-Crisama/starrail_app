@@ -7,6 +7,8 @@ import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/auth/presentation/providers/profile_provider.dart';
 import 'features/home/presentation/providers/home_provider.dart';
 import 'features/message/presentation/providers/message_provider.dart';
+import 'features/server/presentation/providers/channel_provider.dart';
+import 'features/server/presentation/providers/role_provider.dart';
 import 'features/server/presentation/providers/server_provider.dart';
 
 /// Thêm WidgetsBindingObserver để lắng nghe App chuyển nền/thoát
@@ -91,6 +93,11 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
 
         ref.invalidate(profileNotifierProvider);
         ref.invalidate(userServersStreamProvider);
+        ref.invalidate(serverChannelsStreamProvider);
+        ref.invalidate(visibleServerChannelsProvider);
+        ref.invalidate(canSendInChannelProvider);
+        ref.invalidate(hasPermissionProvider);
+        ref.invalidate(isServerOwnerProvider);
         ref.invalidate(unreadStatusNotifierProvider);
       },
     );
