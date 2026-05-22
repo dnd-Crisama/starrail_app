@@ -10,6 +10,7 @@ import '../../domain/entities/dm_chat_entity.dart';
 import '../../domain/entities/dm_message_entity.dart';
 import '../providers/dm_provider.dart';
 import '../providers/friend_provider.dart';
+import 'package:flutter/services.dart';
 import '../widgets/dm_message_bubble.dart';
 import '../widgets/group_member_list_panel.dart';
 import '../widgets/edit_group_dm_dialog.dart';
@@ -28,12 +29,31 @@ class DmChatScreen extends ConsumerStatefulWidget {
 class _DmChatScreenState extends ConsumerState<DmChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
+  late final FocusNode _focusNode;
   bool _showMemberList = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode(
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+          final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
+          if (!isShiftPressed) {
+            _sendMessage(ref.read(authNotifierProvider).user?.uid ?? '');
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+    );
+  }
 
   @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -376,8 +396,10 @@ class _DmChatScreenState extends ConsumerState<DmChatScreen> {
               ),
               child: TextField(
                 controller: _messageController,
+                focusNode: _focusNode,
                 style: AppTextStyles.textNormal,
                 maxLines: null,
+                textInputAction: TextInputAction.send,
                 decoration: const InputDecoration(
                   hintText: 'Nhập tin nhắn...',
                   hintStyle: TextStyle(color: AppColors.textMuted),
@@ -420,6 +442,7 @@ class _DmChatScreenState extends ConsumerState<DmChatScreen> {
     if (content.isEmpty) return;
 
     _messageController.clear();
+    _focusNode.requestFocus();
 
     // Cache notifier TRƯỚC await để tránh "ref after dispose"
     if (!mounted) return;

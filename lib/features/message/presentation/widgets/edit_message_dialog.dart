@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 
@@ -19,17 +20,31 @@ class EditMessageDialog extends StatefulWidget {
 
 class _EditMessageDialogState extends State<EditMessageDialog> {
   late final TextEditingController _controller;
+  late final FocusNode _focusNode;
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.currentContent);
+    _focusNode = FocusNode(
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+          final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
+          if (!isShiftPressed) {
+            _save();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+    );
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -59,6 +74,7 @@ class _EditMessageDialogState extends State<EditMessageDialog> {
             const SizedBox(height: 16),
             TextField(
               controller: _controller,
+              focusNode: _focusNode,
               style: AppTextStyles.bodySecondary,
               autofocus: true,
               maxLines: null,

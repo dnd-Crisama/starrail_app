@@ -14,10 +14,20 @@ class PresenceRemoteDatasourceImpl implements PresenceRemoteDatasource {
   Future<void> updatePresenceStatus(String uid, String status) async {
     try {
       final now = DateTime.now().millisecondsSinceEpoch;
-      await database.ref('presence/$uid').update({
+      final presenceRef = database.ref('presence/$uid');
+      await presenceRef.update({
         'status': status,
         'lastSeen': now,
       });
+
+      if (status != 'OFFLINE' && status != 'INVISIBLE') {
+        await presenceRef.onDisconnect().update({
+          'status': 'OFFLINE',
+          'lastSeen': ServerValue.timestamp,
+        });
+      } else {
+        await presenceRef.onDisconnect().cancel();
+      }
     } catch (e) {
       throw ServerException(message: 'Failed to update presence status: $e');
     }

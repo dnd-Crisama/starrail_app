@@ -147,6 +147,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    _focusNode.onKeyEvent = (node, event) {
+      if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+        final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
+        if (!isShiftPressed) {
+          _sendMessage();
+          return KeyEventResult.handled;
+        }
+      }
+      return KeyEventResult.ignored;
+    };
     // Lắng nghe khi edit message được set → điền nội dung vào input
     ref.listenManual(editingMessageProvider, (previous, next) {
       if (next != null) {

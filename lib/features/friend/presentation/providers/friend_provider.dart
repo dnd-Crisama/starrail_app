@@ -1,6 +1,7 @@
 // lib/features/friend/presentation/providers/friend_provider.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/data/models/user_model.dart';
@@ -390,17 +391,47 @@ final friendActionNotifierProvider =
       );
     });
 
+/// Provider lắng nghe realtime trạng thái online/offline từ Realtime Database.
+final userPresenceStatusProvider = StreamProvider.family<String, String>((ref, userId) {
+  if (userId.isEmpty) return Stream.value('OFFLINE');
+  final database = ref.watch(firebaseDatabaseProvider);
+  return database
+      .ref('presence/$userId/status')
+      .onValue
+      .map((event) => event.snapshot.value as String? ?? 'OFFLINE');
+});
+
 /// Provider lắng nghe realtime thông tin user theo uid (dùng cho hiển thị bạn bè).
 final userProfileProvider = StreamProvider.family<UserEntity?, String>(
   (ref, userId) {
     if (userId.isEmpty) return Stream.value(null);
+
+    final presenceAsync = ref.watch(userPresenceStatusProvider(userId));
+    final presenceStatus = presenceAsync.value ?? 'OFFLINE';
+
     return FirebaseFirestore.instance
         .collection('users')
         .doc(userId)
         .snapshots()
         .map((doc) {
       if (!doc.exists || doc.data() == null) return null;
-      return UserModel.fromFirestore(doc.data()!, userId).toEntity();
+      final user = UserModel.fromFirestore(doc.data()!, userId).toEntity();
+      return user.copyWith(status: _parseUserStatus(presenceStatus));
     });
   },
 );
+
+UserStatus _parseUserStatus(String statusStr) {
+  switch (statusStr.toUpperCase()) {
+    case 'ONLINE':
+      return UserStatus.online;
+    case 'IDLE':
+      return UserStatus.idle;
+    case 'DND':
+      return UserStatus.dnd;
+    case 'INVISIBLE':
+      return UserStatus.invisible;
+    default:
+      return UserStatus.offline;
+  }
+}

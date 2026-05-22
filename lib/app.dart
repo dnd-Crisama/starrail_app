@@ -29,17 +29,24 @@ class _AppLifecycleObserver extends WidgetsBindingObserver {
 
     switch (state) {
       case AppLifecycleState.resumed:
-        // App mở lên -> Online
+        // App mở lên/focus -> Online
         ref
             .read(profileNotifierProvider.notifier)
             .updatePresenceStatus(UserStatus.online);
         break;
       case AppLifecycleState.inactive:
-        break;
       case AppLifecycleState.paused:
-      case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
-        // App xuống nền/tắt -> Idle
+        // Tab ra ngoài/mở app khác/bấm qua cửa sổ khác -> Idle
+        ref
+            .read(profileNotifierProvider.notifier)
+            .updatePresenceStatus(UserStatus.idle);
+        break;
+      case AppLifecycleState.detached:
+        // Đóng app hoàn toàn -> Offline
+        ref
+            .read(profileNotifierProvider.notifier)
+            .updatePresenceStatus(UserStatus.offline);
         break;
     }
   }
