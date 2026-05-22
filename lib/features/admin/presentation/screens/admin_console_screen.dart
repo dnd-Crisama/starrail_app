@@ -173,7 +173,7 @@ class _UserFilterBar extends ConsumerWidget {
                 AdminUserFilter.superAdmin,
           ),
           _FilterChipButton(
-            label: 'Bi khoa',
+            label: 'Bị khóa',
             selected: selectedFilter == AdminUserFilter.disabled,
             onTap: () => ref.read(adminUserFilterProvider.notifier).state =
                 AdminUserFilter.disabled,
