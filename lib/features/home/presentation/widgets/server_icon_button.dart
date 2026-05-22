@@ -33,8 +33,7 @@ class ServerIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = _buildIcon();
-    final minWidth =
-        indicatorStyle == ServerIconIndicatorStyle.sidePill ? size + 8 : size;
+    final containerWidth = size + 24; // 72.0 when size is 48
     final minHeight =
         indicatorStyle == ServerIconIndicatorStyle.bottomDot && hasUnread
             ? size + 12
@@ -42,15 +41,31 @@ class ServerIconButton extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.only(bottom: bottomPadding),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          minWidth: minWidth,
-          minHeight: minHeight,
-        ),
+      child: SizedBox(
+        width: containerWidth,
+        height: minHeight,
         child: switch (indicatorStyle) {
-          ServerIconIndicatorStyle.sidePill => _buildSidePill(icon),
-          ServerIconIndicatorStyle.bottomDot => _buildBottomDot(icon),
-          ServerIconIndicatorStyle.none => icon,
+          ServerIconIndicatorStyle.sidePill => Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Center(child: icon),
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: _buildSidePillIndicator(),
+                  ),
+                ),
+              ],
+            ),
+          ServerIconIndicatorStyle.bottomDot => Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Center(child: _buildBottomDot(icon)),
+              ],
+            ),
+          ServerIconIndicatorStyle.none => Center(child: icon),
         },
       ),
     );
@@ -98,7 +113,7 @@ class ServerIconButton extends StatelessWidget {
     );
   }
 
-  Widget _buildSidePill(Widget icon) {
+  Widget _buildSidePillIndicator() {
     final double pillHeight;
     if (isSelected) {
       pillHeight = 36;
@@ -108,22 +123,18 @@ class ServerIconButton extends StatelessWidget {
       pillHeight = 0;
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          width: pillHeight > 0 ? 4 : 0,
-          height: pillHeight > 0 ? pillHeight : 0,
-          margin: const EdgeInsets.only(right: 4),
-          decoration: BoxDecoration(
-            color: pillHeight > 0 ? AppColors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(2),
-          ),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      width: pillHeight > 0 ? 4 : 0,
+      height: pillHeight > 0 ? pillHeight : 0,
+      decoration: BoxDecoration(
+        color: pillHeight > 0 ? AppColors.white : Colors.transparent,
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(4),
+          bottomRight: Radius.circular(4),
         ),
-        icon,
-      ],
+      ),
     );
   }
 }
