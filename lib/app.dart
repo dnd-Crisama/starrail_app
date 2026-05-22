@@ -78,6 +78,8 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(presenceSyncProvider);
+
     ref.listen<String?>(
       authNotifierProvider.select((state) => state.user?.uid),
       (previousUserId, nextUserId) {

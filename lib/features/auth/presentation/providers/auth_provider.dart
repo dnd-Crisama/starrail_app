@@ -40,7 +40,7 @@ final firebaseDatabaseProvider = Provider<FirebaseDatabase>((ref) {
   );
 });
 
-final _presenceRemoteDatasourceProvider = Provider<PresenceRemoteDatasource>((
+final presenceRemoteDatasourceProvider = Provider<PresenceRemoteDatasource>((
   ref,
 ) {
   return PresenceRemoteDatasourceImpl(
@@ -52,7 +52,7 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepositoryImpl(
     authRemoteDatasource: ref.watch(_authRemoteDatasourceProvider),
     userRemoteDatasource: ref.watch(_userRemoteDatasourceProvider),
-    presenceRemoteDatasource: ref.watch(_presenceRemoteDatasourceProvider),
+    presenceRemoteDatasource: ref.watch(presenceRemoteDatasourceProvider),
   );
 });
 

@@ -11,6 +11,7 @@ import '../../data/datasources/storage_remote_datasource.dart';
 import '../../data/datasources/presence_remote_datasource.dart';
 import '../../data/repositories/user_repository_impl.dart';
 import 'auth_provider.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 final storageDatasourceProvider = Provider<StorageRemoteDatasource>((ref) {
   return CloudinaryStorageDatasource();
@@ -164,3 +165,28 @@ final profileNotifierProvider =
         ref: ref,
       );
     });
+
+final presenceSyncProvider = Provider.autoDispose<void>((ref) {
+  final user = ref.watch(authNotifierProvider.select((state) => state.user));
+  if (user == null) return;
+
+  final FirebaseDatabase database = ref.watch(firebaseDatabaseProvider);
+  final presenceDatasource = ref.watch(presenceRemoteDatasourceProvider);
+  final uid = user.uid;
+
+  final subscription = database.ref('.info/connected').onValue.listen((event) {
+    final connected = event.snapshot.value as bool? ?? false;
+    if (connected) {
+      final currentProfile = ref.read(profileNotifierProvider).user;
+      final currentStatus = currentProfile?.status ?? user.status;
+      
+      presenceDatasource
+          .updatePresenceStatus(uid, currentStatus.name.toUpperCase())
+          .catchError((_) {});
+    }
+  });
+
+  ref.onDispose(() {
+    subscription.cancel();
+  });
+});
