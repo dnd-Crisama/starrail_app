@@ -18,17 +18,13 @@ Project được tổ chức theo hướng **clean architecture**, để dễ m�
 ## Demo
 
 ### Hình ảnh giao diện
-
-Repository hiện tại chưa có ảnh chụp màn hình được commit sẵn.  
-Sau khi chụp màn hình app, hãy tạo thư mục `docs/screenshots/` và thêm ảnh vào theo gợi ý bên dưới.
-
 | Splash | Login | Register |
 |---|---|---|
-| <img src="docs/screenshots/splash.png" width="220" alt="Splash Screen" /> | <img src="docs/screenshots/login.png" width="220" alt="Login Screen" /> | <img src="docs/screenshots/register.png" width="220" alt="Register Screen" /> |
+| <img width="442" height="834" alt="image" src="https://github.com/user-attachments/assets/0d73ffc0-14b4-48f3-93d5-2606acce5c8c" /> | <img width="422" height="826" alt="image" src="https://github.com/user-attachments/assets/bd6a77a2-6277-4c3a-8022-ae145f44e222" /> | <img width="422" height="840" alt="image" src="https://github.com/user-attachments/assets/9189d21d-b30f-4423-9a51-7d97b821e28d" /> |
 
 | Home | Chat | Friends |
 |---|---|---|
-| <img src="docs/screenshots/home.png" width="220" alt="Home Screen" /> | <img src="docs/screenshots/chat.png" width="220" alt="Chat Screen" /> | <img src="docs/screenshots/friends.png" width="220" alt="Friends Screen" /> |
+| <img width="455" height="834" alt="image" src="https://github.com/user-attachments/assets/a5b1f227-0533-42be-9198-495358fc7946" /> | <img width="426" height="826" alt="image" src="https://github.com/user-attachments/assets/e14ed606-28cc-4ef1-87c8-e6d9dc12afd4" /> | <img width="451" height="836" alt="image" src="https://github.com/user-attachments/assets/61dc3a62-240a-4ce3-8d30-952708fddc3e" /> |
 
 ## Tính năng chính
 
