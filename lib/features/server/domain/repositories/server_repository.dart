@@ -17,6 +17,11 @@ abstract class ServerRepository {
   /// Ném ServerFailure nếu user không phải member.
   Future<void> leaveServer({required String serverId});
 
+  Future<void> kickMember({
+    required String serverId,
+    required String targetUserId,
+  });
+
   /// Xóa server (chỉ owner).
   /// Ném ServerFailure nếu user không phải owner.
   /// Xóa toàn bộ subcollections.

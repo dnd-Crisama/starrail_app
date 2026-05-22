@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../../core/errors/failures.dart';
 import '../../../../core/usecases/usecase.dart';
 import '../../../auth/data/datasources/cloudinary_storage_datasource.dart';
 import '../../domain/entities/server_entity.dart';
@@ -12,6 +11,7 @@ import '../../domain/usecases/create_server_usecase.dart';
 import '../../domain/usecases/delete_server_usecase.dart';
 import '../../domain/usecases/get_user_servers_usecase.dart';
 import '../../domain/usecases/join_server_usecase.dart';
+import '../../domain/usecases/kick_member_usecase.dart';
 import '../../domain/usecases/leave_server_usecase.dart';
 import '../../domain/usecases/get_server_members_usecase.dart';
 import '../../data/datasources/server_remote_datasource.dart';
@@ -48,6 +48,10 @@ final joinServerUseCaseProvider = Provider<JoinServerUseCase>((ref) {
 
 final leaveServerUseCaseProvider = Provider<LeaveServerUseCase>((ref) {
   return LeaveServerUseCase(ref.watch(_serverRepositoryProvider));
+});
+
+final kickMemberUseCaseProvider = Provider<KickMemberUseCase>((ref) {
+  return KickMemberUseCase(ref.watch(_serverRepositoryProvider));
 });
 
 final deleteServerUseCaseProvider = Provider<DeleteServerUseCase>((ref) {
@@ -226,12 +230,15 @@ class ServerSettingsState {
 
 class ServerSettingsNotifier extends StateNotifier<ServerSettingsState> {
   final LeaveServerUseCase _leaveServerUseCase;
+  final KickMemberUseCase _kickMemberUseCase;
   final DeleteServerUseCase _deleteServerUseCase;
 
   ServerSettingsNotifier({
     required LeaveServerUseCase leaveServerUseCase,
+    required KickMemberUseCase kickMemberUseCase,
     required DeleteServerUseCase deleteServerUseCase,
   }) : _leaveServerUseCase = leaveServerUseCase,
+       _kickMemberUseCase = kickMemberUseCase,
        _deleteServerUseCase = deleteServerUseCase,
        super(const ServerSettingsState());
 
@@ -256,6 +263,26 @@ class ServerSettingsNotifier extends StateNotifier<ServerSettingsState> {
     state = state.copyWith(isLoading: true, errorMessage: null);
     final result = await _deleteServerUseCase(
       DeleteServerParams(serverId: serverId),
+    );
+    return result.fold(
+      ifLeft: (failure) {
+        state = state.copyWith(isLoading: false, errorMessage: failure.message);
+        return false;
+      },
+      ifRight: (_) {
+        state = state.copyWith(isLoading: false, actionCompleted: true);
+        return true;
+      },
+    );
+  }
+
+  Future<bool> kickMember({
+    required String serverId,
+    required String targetUserId,
+  }) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    final result = await _kickMemberUseCase(
+      KickMemberParams(serverId: serverId, targetUserId: targetUserId),
     );
     return result.fold(
       ifLeft: (failure) {
@@ -306,6 +333,7 @@ final serverSettingsNotifierProvider =
     StateNotifierProvider<ServerSettingsNotifier, ServerSettingsState>((ref) {
       return ServerSettingsNotifier(
         leaveServerUseCase: ref.watch(leaveServerUseCaseProvider),
+        kickMemberUseCase: ref.watch(kickMemberUseCaseProvider),
         deleteServerUseCase: ref.watch(deleteServerUseCaseProvider),
       );
     });

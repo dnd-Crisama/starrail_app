@@ -11,6 +11,8 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_avatar.dart';
 import '../../../auth/data/datasources/cloudinary_storage_datasource.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../server/data/models/role_model.dart';
+import '../../../server/domain/entities/role_entity.dart';
 import '../../domain/entities/message_entity.dart';
 import '../providers/message_provider.dart';
 import '../widgets/message_context_menu.dart';
@@ -124,7 +126,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void initState() {
     super.initState();
     _focusNode.onKeyEvent = (node, event) {
-      if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.enter) {
         final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
         if (!isShiftPressed) {
           _sendMessage();
@@ -836,6 +839,59 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  Future<void> _showUserProfile(String userId) async {
+    final serverRoles = <RoleEntity>[];
+    var isServerOwner = false;
+
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final serverDoc = await firestore
+          .collection('servers')
+          .doc(widget.serverId)
+          .get();
+      if (serverDoc.exists) {
+        isServerOwner = serverDoc.data()?['ownerId'] == userId;
+      }
+
+      final memberDoc = await firestore
+          .collection('servers')
+          .doc(widget.serverId)
+          .collection('members')
+          .doc(userId)
+          .get();
+      final roleIds = List<String>.from(
+        memberDoc.data()?['roleIds'] as List? ?? const [],
+      );
+
+      for (final roleId in roleIds) {
+        final roleDoc = await firestore
+            .collection('servers')
+            .doc(widget.serverId)
+            .collection('roles')
+            .doc(roleId)
+            .get();
+        if (roleDoc.exists) {
+          serverRoles.add(
+            RoleModel.fromFirestore(
+              roleDoc.data() ?? const <String, dynamic>{},
+              roleDoc.id,
+            ).toEntity(),
+          );
+        }
+      }
+    } catch (_) {
+      // Profile vẫn mở được nếu không lấy được role.
+    }
+
+    if (!mounted) return;
+    await UserProfileModal.showFromUid(
+      context,
+      uid: userId,
+      serverRoles: serverRoles,
+      isServerOwner: isServerOwner,
+    );
+  }
+
   void _preloadVisibleUserData(List<MessageEntity> messages) {
     final ids = messages.map((m) => m.senderId).toSet();
     for (final id in ids) {
@@ -1431,7 +1487,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             getRepliedMessage: () => _getRepliedMessage(message),
             getUserDataCache: _userDataCache,
             onUserTap: () {
-              UserProfileModal.showFromUid(context, uid: message.senderId);
+              _showUserProfile(message.senderId);
             },
             onNavigateToMessage: (messageId) {
               _scrollToMessage(messageId);

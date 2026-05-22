@@ -16,6 +16,15 @@ class RoleManagementScreen extends ConsumerStatefulWidget {
 }
 
 class _RoleManagementScreenState extends ConsumerState<RoleManagementScreen> {
+  final _memberSearchController = TextEditingController();
+  String _memberSearchQuery = '';
+
+  @override
+  void dispose() {
+    _memberSearchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final serverId = ref.watch(selectedServerIdProvider);
@@ -197,119 +206,194 @@ class _RoleManagementScreenState extends ConsumerState<RoleManagementScreen> {
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: members.length,
-          itemBuilder: (context, index) {
-            final item = members[index];
-            final displayName =
-                item.member.nickname ??
-                item.user?.username ??
-                item.member.userId;
-            final avatarUrl = item.user?.avatarUrl ?? '';
+        final query = _memberSearchQuery.trim().toLowerCase();
+        final filteredMembers = query.isEmpty
+            ? members
+            : members.where((item) {
+                final searchableText = [
+                  item.member.nickname,
+                  item.user?.username,
+                  item.user?.email,
+                  item.member.userId,
+                ].whereType<String>().join(' ').toLowerCase();
+                return searchableText.contains(query);
+              }).toList();
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.bgSecondary,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 18,
-                        backgroundColor: AppColors.brand,
-                        backgroundImage: avatarUrl.isNotEmpty
-                            ? NetworkImage(avatarUrl)
-                            : null,
-                        child: avatarUrl.isEmpty
-                            ? Text(
-                                displayName.isNotEmpty
-                                    ? displayName[0].toUpperCase()
-                                    : '?',
-                                style: const TextStyle(color: AppColors.white),
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              displayName,
-                              style: AppTextStyles.bodySecondary.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              '${item.member.roleIds.length} vai trò',
-                              style: AppTextStyles.textMutedSmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: TextField(
+                controller: _memberSearchController,
+                onChanged: (value) {
+                  setState(() => _memberSearchQuery = value);
+                },
+                style: AppTextStyles.bodySecondary,
+                decoration: InputDecoration(
+                  hintText: 'Tìm thành viên để gán vai trò',
+                  hintStyle: AppTextStyles.textMutedSmall,
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: AppColors.textMuted,
                   ),
-                  const SizedBox(height: 10),
-                  if (editableRoles.isEmpty)
-                    const Text(
-                      'Chưa có vai trò có thể gán',
-                      style: AppTextStyles.textMutedSmall,
-                    )
-                  else
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: editableRoles.map((role) {
-                        final selected = item.member.roleIds.contains(
-                          role.roleId,
-                        );
-                        return FilterChip(
-                          selected: selected,
-                          label: Text(role.name),
-                          avatar: CircleAvatar(
-                            radius: 6,
-                            backgroundColor: Color(role.color),
+                  suffixIcon: _memberSearchQuery.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Xóa tìm kiếm',
+                          icon: const Icon(
+                            Icons.close,
+                            color: AppColors.textMuted,
                           ),
-                          selectedColor: Color(role.color).withOpacity(0.22),
-                          backgroundColor: AppColors.bgModifierHover,
-                          checkmarkColor: AppColors.white,
-                          labelStyle: TextStyle(
-                            color: selected
-                                ? AppColors.white
-                                : AppColors.interactiveNormal,
-                          ),
-                          onSelected: (value) async {
-                            final notifier = ref.read(
-                              roleManagementNotifierProvider.notifier,
-                            );
-                            if (value) {
-                              await notifier.assignRoleToMember(
-                                serverId: serverId,
-                                userId: item.member.userId,
-                                roleId: role.roleId,
-                              );
-                            } else {
-                              await notifier.removeRoleFromMember(
-                                serverId: serverId,
-                                userId: item.member.userId,
-                                roleId: role.roleId,
-                              );
-                            }
+                          onPressed: () {
+                            _memberSearchController.clear();
+                            setState(() => _memberSearchQuery = '');
                           },
-                        );
-                      }).toList(),
-                    ),
-                ],
+                        ),
+                  filled: true,
+                  fillColor: AppColors.bgSecondary,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                ),
               ),
-            );
-          },
+            ),
+            if (filteredMembers.isEmpty)
+              const Expanded(
+                child: Center(
+                  child: Text(
+                    'Không tìm thấy thành viên',
+                    style: AppTextStyles.textMuted,
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  itemCount: filteredMembers.length,
+                  itemBuilder: (context, index) {
+                    final item = filteredMembers[index];
+                    final displayName =
+                        item.member.nickname ??
+                        item.user?.username ??
+                        item.member.userId;
+                    final avatarUrl = item.user?.avatarUrl ?? '';
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgSecondary,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: AppColors.brand,
+                                backgroundImage: avatarUrl.isNotEmpty
+                                    ? NetworkImage(avatarUrl)
+                                    : null,
+                                child: avatarUrl.isEmpty
+                                    ? Text(
+                                        displayName.isNotEmpty
+                                            ? displayName[0].toUpperCase()
+                                            : '?',
+                                        style: const TextStyle(
+                                          color: AppColors.white,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      displayName,
+                                      style: AppTextStyles.bodySecondary
+                                          .copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      '${item.member.roleIds.length} vai trò',
+                                      style: AppTextStyles.textMutedSmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          if (editableRoles.isEmpty)
+                            const Text(
+                              'Chưa có vai trò có thể gán',
+                              style: AppTextStyles.textMutedSmall,
+                            )
+                          else
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: editableRoles.map((role) {
+                                final selected = item.member.roleIds.contains(
+                                  role.roleId,
+                                );
+                                return FilterChip(
+                                  selected: selected,
+                                  label: Text(role.name),
+                                  avatar: CircleAvatar(
+                                    radius: 6,
+                                    backgroundColor: Color(role.color),
+                                  ),
+                                  selectedColor: Color(
+                                    role.color,
+                                  ).withOpacity(0.22),
+                                  backgroundColor: AppColors.bgModifierHover,
+                                  checkmarkColor: AppColors.white,
+                                  labelStyle: TextStyle(
+                                    color: selected
+                                        ? AppColors.white
+                                        : AppColors.interactiveNormal,
+                                  ),
+                                  onSelected: (value) async {
+                                    final notifier = ref.read(
+                                      roleManagementNotifierProvider.notifier,
+                                    );
+                                    if (value) {
+                                      await notifier.assignRoleToMember(
+                                        serverId: serverId,
+                                        userId: item.member.userId,
+                                        roleId: role.roleId,
+                                      );
+                                    } else {
+                                      await notifier.removeRoleFromMember(
+                                        serverId: serverId,
+                                        userId: item.member.userId,
+                                        roleId: role.roleId,
+                                      );
+                                    }
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
         );
       },
       loading: () => const Center(

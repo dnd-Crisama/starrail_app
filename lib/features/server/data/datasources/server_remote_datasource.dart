@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/utils/logger.dart';
+import '../../domain/entities/permission.dart';
 import '../models/server_model.dart';
 import '../models/server_member_model.dart';
 
@@ -14,6 +15,12 @@ abstract class ServerRemoteDatasource {
   Future<ServerModel> joinServer({required String inviteCode});
 
   Future<void> leaveServer({required String serverId, required String userId});
+
+  Future<void> kickMember({
+    required String serverId,
+    required String actorUserId,
+    required String targetUserId,
+  });
 
   Future<void> deleteServer({required String serverId, required String userId});
 
@@ -249,6 +256,71 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
   }
 
   @override
+  Future<void> kickMember({
+    required String serverId,
+    required String actorUserId,
+    required String targetUserId,
+  }) async {
+    try {
+      if (actorUserId.isEmpty) {
+        throw const AuthException(message: 'Người dùng chưa xác thực');
+      }
+
+      if (actorUserId == targetUserId) {
+        throw const ServerException(message: 'Bạn không thể tự đá chính mình');
+      }
+
+      final serverDoc = await firestore
+          .collection('servers')
+          .doc(serverId)
+          .get();
+      if (!serverDoc.exists) {
+        throw const ServerException(message: 'Không tìm thấy server');
+      }
+
+      final ownerId = serverDoc.data()?['ownerId'] as String?;
+      if (targetUserId == ownerId) {
+        throw const ServerException(message: 'Không thể đá chủ sở hữu server');
+      }
+
+      final actorCanKick =
+          actorUserId == ownerId ||
+          await _memberHasPermission(
+            serverId: serverId,
+            userId: actorUserId,
+            permission: Permission.kickMembers.value,
+          );
+      if (!actorCanKick) {
+        throw const ServerException(
+          message: 'Bạn không có quyền đá thành viên',
+        );
+      }
+
+      final targetMemberRef = firestore
+          .collection('servers')
+          .doc(serverId)
+          .collection('members')
+          .doc(targetUserId);
+      final targetMemberDoc = await targetMemberRef.get();
+      if (!targetMemberDoc.exists) {
+        throw const ServerException(
+          message: 'Thành viên không tồn tại trong server',
+        );
+      }
+
+      await targetMemberRef.delete();
+
+      Logger.info(
+        'User $targetUserId kicked from server: $serverId',
+        tag: 'ServerDatasource',
+      );
+    } catch (e) {
+      if (e is ServerException || e is AuthException) rethrow;
+      throw ServerException(message: 'Đá thành viên thất bại: $e');
+    }
+  }
+
+  @override
   Future<void> deleteServer({
     required String serverId,
     required String userId,
@@ -459,6 +531,53 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
     return code;
   }
 
+  Future<bool> _memberHasPermission({
+    required String serverId,
+    required String userId,
+    required String permission,
+  }) async {
+    final memberDoc = await firestore
+        .collection('servers')
+        .doc(serverId)
+        .collection('members')
+        .doc(userId)
+        .get();
+    if (!memberDoc.exists) return false;
+
+    final memberRoleIds = <String>{
+      ...List<String>.from(memberDoc.data()?['roleIds'] as List? ?? const []),
+    };
+
+    final defaultRoleQuery = await firestore
+        .collection('servers')
+        .doc(serverId)
+        .collection('roles')
+        .where('isDefault', isEqualTo: true)
+        .limit(1)
+        .get();
+    if (defaultRoleQuery.docs.isNotEmpty) {
+      memberRoleIds.add(defaultRoleQuery.docs.first.id);
+    }
+
+    for (final roleId in memberRoleIds) {
+      final roleDoc = await firestore
+          .collection('servers')
+          .doc(serverId)
+          .collection('roles')
+          .doc(roleId)
+          .get();
+      final permissions = List<String>.from(
+        roleDoc.data()?['permissions'] as List? ?? const [],
+      );
+      if (permissions.contains(permission) ||
+          permissions.contains(Permission.manageServer.value)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   @override
   Stream<List<ServerMemberModel>> watchServerMembers({
     required String serverId,
@@ -471,9 +590,15 @@ class ServerRemoteDatasourceImpl implements ServerRemoteDatasource {
         .orderBy('joinedAt')
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => ServerMemberModel.fromFirestore(doc.data(), doc.id, serverId))
-          .toList();
-    });
+          return snapshot.docs
+              .map(
+                (doc) => ServerMemberModel.fromFirestore(
+                  doc.data(),
+                  doc.id,
+                  serverId,
+                ),
+              )
+              .toList();
+        });
   }
 }

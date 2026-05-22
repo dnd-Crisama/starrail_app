@@ -10,18 +10,23 @@ import '../../../friend/domain/entities/friendship_entity.dart';
 import '../../../friend/presentation/providers/dm_provider.dart';
 import '../../../friend/presentation/providers/friend_provider.dart';
 import '../../../home/presentation/providers/home_provider.dart';
+import '../../../server/domain/entities/role_entity.dart';
 
 /// Discord-style profile popup khi click vào avatar hoặc tên user khác
 class UserProfileModal extends ConsumerWidget {
   final UserEntity user;
   final int mutualServers;
   final int mutualFriends;
+  final List<RoleEntity> serverRoles;
+  final bool isServerOwner;
 
   const UserProfileModal({
     super.key,
     required this.user,
     this.mutualServers = 0,
     this.mutualFriends = 0,
+    this.serverRoles = const [],
+    this.isServerOwner = false,
   });
 
   /// Hiển thị modal dạng dialog
@@ -30,6 +35,8 @@ class UserProfileModal extends ConsumerWidget {
     required UserEntity user,
     int mutualServers = 0,
     int mutualFriends = 0,
+    List<RoleEntity> serverRoles = const [],
+    bool isServerOwner = false,
   }) {
     return showDialog(
       context: context,
@@ -38,6 +45,8 @@ class UserProfileModal extends ConsumerWidget {
         user: user,
         mutualServers: mutualServers,
         mutualFriends: mutualFriends,
+        serverRoles: serverRoles,
+        isServerOwner: isServerOwner,
       ),
     );
   }
@@ -46,6 +55,8 @@ class UserProfileModal extends ConsumerWidget {
   static Future<void> showFromUid(
     BuildContext context, {
     required String uid,
+    List<RoleEntity> serverRoles = const [],
+    bool isServerOwner = false,
   }) async {
     try {
       final doc = await FirebaseFirestore.instance
@@ -71,7 +82,12 @@ class UserProfileModal extends ConsumerWidget {
       );
 
       if (context.mounted) {
-        show(context, user: user);
+        show(
+          context,
+          user: user,
+          serverRoles: serverRoles,
+          isServerOwner: isServerOwner,
+        );
       }
     } catch (_) {
       // Silent fail — không hiển thị gì nếu không lấy được data
@@ -120,105 +136,198 @@ class UserProfileModal extends ConsumerWidget {
             // Banner + Avatar section
             _buildBannerWithAvatar(),
             // User info section
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Username
-                  Text(
-                    user.username,
-                    style: AppTextStyles.headerPrimary.copyWith(fontSize: 20),
-                  ),
-                  const SizedBox(height: 2),
-                  // Username + status
-                  Row(
-                    children: [
-                      Text(
-                        user.username,
-                        style: AppTextStyles.textMutedSmall.copyWith(
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      _buildStatusDot(size: 8),
-                      const SizedBox(width: 4),
-                      Text(
-                        _statusLabel,
-                        style: AppTextStyles.textMutedSmall.copyWith(
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                  // Mutual info
-                  if (mutualFriends > 0 || mutualServers > 0) ...[
-                    const SizedBox(height: 8),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Username
                     Text(
-                      '$mutualFriends Bạn chung • $mutualServers Máy chủ chung',
-                      style: AppTextStyles.textMutedSmall.copyWith(
-                        fontSize: 12,
-                      ),
+                      user.username,
+                      style: AppTextStyles.headerPrimary.copyWith(fontSize: 20),
                     ),
-                  ],
-                  if (!isSelf) ...[
-                    const SizedBox(height: 14),
-                    _buildActionButtons(context, ref, currentUserId),
-                  ],
-                  // Bio
-                  if (user.bio.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgModifierHover,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'VỀ BẢN THÂN',
-                            style: AppTextStyles.header4.copyWith(
-                              fontSize: 10,
-                              color: AppColors.textNormal,
-                            ),
+                    const SizedBox(height: 2),
+                    // Username + status
+                    Row(
+                      children: [
+                        Text(
+                          user.username,
+                          style: AppTextStyles.textMutedSmall.copyWith(
+                            fontSize: 13,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            user.bio,
-                            style: AppTextStyles.bodySecondary.copyWith(
-                              fontSize: 13,
-                            ),
+                        ),
+                        const SizedBox(width: 6),
+                        _buildStatusDot(size: 8),
+                        const SizedBox(width: 4),
+                        Text(
+                          _statusLabel,
+                          style: AppTextStyles.textMutedSmall.copyWith(
+                            fontSize: 13,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                  const SizedBox(height: 12),
-                  // Created at
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.calendar_today,
-                        size: 14,
-                        color: AppColors.textMuted,
-                      ),
-                      const SizedBox(width: 6),
+                    // Mutual info
+                    if (mutualFriends > 0 || mutualServers > 0) ...[
+                      const SizedBox(height: 8),
                       Text(
-                        'Tham gia ngày ${_formatDate(user.createdAt)}',
+                        '$mutualFriends Bạn chung • $mutualServers Máy chủ chung',
                         style: AppTextStyles.textMutedSmall.copyWith(
                           fontSize: 12,
                         ),
                       ),
                     ],
-                  ),
-                ],
+                    if (!isSelf) ...[
+                      const SizedBox(height: 14),
+                      _buildActionButtons(context, ref, currentUserId),
+                    ],
+                    if (isServerOwner || serverRoles.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _buildServerRoles(),
+                    ],
+                    // Bio
+                    if (user.bio.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.bgModifierHover,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'VỀ BẢN THÂN',
+                              style: AppTextStyles.header4.copyWith(
+                                fontSize: 10,
+                                color: AppColors.textNormal,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              user.bio,
+                              style: AppTextStyles.bodySecondary.copyWith(
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    // Created at
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.calendar_today,
+                          size: 14,
+                          color: AppColors.textMuted,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Tham gia ngày ${_formatDate(user.createdAt)}',
+                          style: AppTextStyles.textMutedSmall.copyWith(
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildServerRoles() {
+    final visibleRoles =
+        serverRoles
+            .where((role) => !role.isEveryoneRole && role.name != '@everyone')
+            .toList()
+          ..sort((a, b) => b.hierarchyLevel.compareTo(a.hierarchyLevel));
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.bgModifierHover,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'VAI TRÒ',
+            style: AppTextStyles.header4.copyWith(
+              fontSize: 10,
+              color: AppColors.textNormal,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (isServerOwner)
+                _buildRoleChip(
+                  name: 'Owner',
+                  color: AppColors.statusIdle,
+                  icon: Icons.workspace_premium_rounded,
+                ),
+              for (final role in visibleRoles)
+                _buildRoleChip(name: role.name, color: Color(role.color)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoleChip({
+    required String name,
+    required Color color,
+    IconData? icon,
+  }) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 220),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.bgTertiary,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, color: color, size: 13),
+            const SizedBox(width: 5),
+          ] else ...[
+            Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+          ],
+          Flexible(
+            child: Text(
+              name,
+              style: AppTextStyles.textMutedSmall.copyWith(
+                color: AppColors.textNormal,
+                fontSize: 12,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -563,6 +672,6 @@ class UserProfileModal extends ConsumerWidget {
       'Tháng 11',
       'Tháng 12',
     ];
-    return '${months[date.month]} ${date.day}, ${date.year}';
+    return '${date.day} ${months[date.month]} , ${date.year}';
   }
 }

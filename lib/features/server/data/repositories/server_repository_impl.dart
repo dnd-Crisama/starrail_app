@@ -62,6 +62,24 @@ class ServerRepositoryImpl implements ServerRepository {
   }
 
   @override
+  Future<void> kickMember({
+    required String serverId,
+    required String targetUserId,
+  }) async {
+    try {
+      await serverRemoteDatasource.kickMember(
+        serverId: serverId,
+        actorUserId: currentUserId,
+        targetUserId: targetUserId,
+      );
+    } on ServerException catch (e) {
+      throw ServerFailure(message: e.message);
+    } catch (e) {
+      throw ServerFailure(message: e.toString());
+    }
+  }
+
+  @override
   Future<void> deleteServer({required String serverId}) async {
     try {
       await serverRemoteDatasource.deleteServer(
