@@ -22,7 +22,7 @@ Project được tổ chức theo hướng **clean architecture**, để dễ m�
 
 | Trang chủ | Tin nhắn trực tiếp | Bạn bè |
 |---|---|---|
-| <img width="455" height="834" alt="image" src="https://github.com/user-attachments/assets/a5b1f227-0533-42be-9198-495358fc7946" /> | <img width="426" height="826" alt="image" src="https://github.com/user-attachments/assets/e14ed606-28cc-4ef1-87c8-e6d9dc12afd4" /> | <img width="451" height="836" alt="image" src="https://github.com/user-attachments/assets/61dc3a62-240a-4ce3-8d30-952708fddc3e" /> |
+| <img width="435" height="827" alt="image" src="https://github.com/user-attachments/assets/3db57fe9-3024-4f85-91a5-48207cb07d85" /> | <img width="426" height="826" alt="image" src="https://github.com/user-attachments/assets/e14ed606-28cc-4ef1-87c8-e6d9dc12afd4" /> | <img width="451" height="836" alt="image" src="https://github.com/user-attachments/assets/61dc3a62-240a-4ce3-8d30-952708fddc3e" /> |
 
 | Server | Kênh chat | Chỉnh sửa kênh chat |
 |---|---|---|
